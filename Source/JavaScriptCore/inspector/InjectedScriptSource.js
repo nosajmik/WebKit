@@ -1542,6 +1542,14 @@ CommandLineAPI.methods["timeStamp"] = function() { return inspectedGlobalObject.
 CommandLineAPI.methods["trace"] = function() { return inspectedGlobalObject.console.trace(...arguments); };
 CommandLineAPI.methods["warn"] = function() { return inspectedGlobalObject.console.warn(...arguments); };
 
+/*
+ nosajmik: add describe() method to command-line API
+ and jlflush() method
+ */
+CommandLineAPI.methods["describe"] = function() { return inspectedGlobalObject.console.describe(...arguments); };
+CommandLineAPI.methods["jlflush"] = function() { return inspectedGlobalObject.console.jlflush(...arguments); };
+
+
 for (let name in CommandLineAPI.methods)
     CommandLineAPI.methods[name].toString = function() { return "function " + name + "() { [Command Line API] }"; };
 

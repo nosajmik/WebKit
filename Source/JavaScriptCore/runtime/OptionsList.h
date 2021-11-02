@@ -129,7 +129,7 @@ bool canUseWebAssemblyFastMemory();
     v(Bool, dumpDisassembly, false, Normal, "dumps disassembly of all JIT compiled code upon compilation") \
     v(Bool, asyncDisassembly, false, Normal, nullptr) \
     v(Bool, logJIT, false, Normal, nullptr) \
-    v(Bool, dumpDFGDisassembly, false, Normal, "dumps disassembly of DFG function upon compilation") \
+    v(Bool, dumpDFGDisassembly, true, Normal, "dumps disassembly of DFG function upon compilation") \
     v(Bool, dumpFTLDisassembly, false, Normal, "dumps disassembly of FTL function upon compilation") \
     v(Bool, dumpRegExpDisassembly, false, Normal, "dumps disassembly of RegExp upon compilation") \
     v(Bool, dumpWasmDisassembly, false, Normal, "dumps disassembly of all Wasm code upon compilation") \
@@ -546,7 +546,7 @@ bool canUseWebAssemblyFastMemory();
     v(Bool, useIntlDateTimeFormatRangeToParts, true, Normal, "Expose the Intl.DateTimeFormat#formatRangeToParts feature.") \
     v(Bool, useAtMethod, false, Normal, "Expose the at() method on Array, %TypedArray%, and String.") \
     v(Bool, useErrorCause, true, Normal, "Allow a cause to be provided when constructing an Error, _NativeError_, or AggregateError.") \
-    v(Bool, useSharedArrayBuffer, false, Normal, nullptr) \
+    v(Bool, useSharedArrayBuffer, true, Normal, nullptr) \
     v(Bool, useTopLevelAwait, true, Normal, "allow the await keyword at the top level of a module.") \
     v(Bool, verboseExecutablePoolAllocation, false, Normal, nullptr) \
     v(Bool, useDataIC, false, Normal, nullptr) \

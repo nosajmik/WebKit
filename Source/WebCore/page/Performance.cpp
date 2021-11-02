@@ -84,10 +84,14 @@ DOMHighResTimeStamp Performance::timeOrigin() const
     return reduceTimeResolution(m_timeOrigin.approximateWallTime().secondsSinceEpoch()).milliseconds();
 }
 
+/*
+ nosajmik: disable timer precision reduction
+ */
 ReducedResolutionSeconds Performance::nowInReducedResolutionSeconds() const
 {
     Seconds now = MonotonicTime::now() - m_timeOrigin;
-    return reduceTimeResolution(now);
+    // return reduceTimeResolution(now);
+    return now;
 }
 
 Seconds Performance::reduceTimeResolution(Seconds seconds)

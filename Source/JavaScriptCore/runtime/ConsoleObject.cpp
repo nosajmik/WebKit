@@ -73,6 +73,12 @@ static JSC_DECLARE_HOST_FUNCTION(consoleProtoFuncGroupEnd);
 static JSC_DECLARE_HOST_FUNCTION(consoleProtoFuncRecord);
 static JSC_DECLARE_HOST_FUNCTION(consoleProtoFuncRecordEnd);
 static JSC_DECLARE_HOST_FUNCTION(consoleProtoFuncScreenshot);
+/*
+ nosajmik: add declaration for describe() port from JSC console
+ and cpuClflush() port from Dollar VM, "jlflush"
+ */
+static JSC_DECLARE_HOST_FUNCTION(consoleProtoFuncDescribe);
+static JSC_DECLARE_HOST_FUNCTION(consoleProtoFuncJlflush);
 
 const ClassInfo ConsoleObject::s_info = { "console", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(ConsoleObject) };
 
@@ -116,6 +122,12 @@ void ConsoleObject::finishCreation(VM& vm, JSGlobalObject* globalObject)
     JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("record", consoleProtoFuncRecord, static_cast<unsigned>(PropertyAttribute::None), 0);
     JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("recordEnd", consoleProtoFuncRecordEnd, static_cast<unsigned>(PropertyAttribute::None), 0);
     JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("screenshot", consoleProtoFuncScreenshot, static_cast<unsigned>(PropertyAttribute::None), 0);
+    /*
+     nosajmik: add function handle for describe() port from JSC
+     and jlflush from $vm
+     */
+    JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("describe", consoleProtoFuncDescribe, static_cast<unsigned>(PropertyAttribute::None), 0);
+    JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("jlflush", consoleProtoFuncJlflush, static_cast<unsigned>(PropertyAttribute::None), 0);
 
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
@@ -431,6 +443,65 @@ JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncScreenshot, (JSGlobalObject* globalObje
 
     client->screenshot(globalObject, Inspector::createScriptArguments(globalObject, callFrame, 0));
     return JSValue::encode(jsUndefined());
+}
+
+/*
+ nosajmik: host function definition for describe() port from JSC console
+ */
+JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncDescribe, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    VM& vm = globalObject->vm();
+    if (callFrame->argumentCount() < 1)
+        return JSValue::encode(jsUndefined());
+    return JSValue::encode(jsString(vm, toString(callFrame->argument(0))));
+}
+
+/*
+ nosajmik: host function definition for cpuClflush() port from Dollar VM
+ */
+// This takes either a JSArrayBuffer, JSArrayBufferView*, or any other object as its first
+// argument. The second argument is expected to be an integer.
+//
+// If the first argument is a JSArrayBuffer, it'll clflush on that buffer
+// plus the second argument as a byte offset. It'll also flush on the object
+// itself so its length, etc, aren't in the cache.
+//
+// If the first argument is not a JSArrayBuffer, we load the butterfly
+// and clflush at the address of the butterfly.
+JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncJlflush, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    VM& vm = globalObject->vm();
+
+    if (!callFrame->argument(1).isUInt32())
+        return JSValue::encode(jsBoolean(false));
+
+    auto clflush = [] (void* ptr) {
+        char* ptrToFlush = static_cast<char*>(ptr);
+        asm volatile ("clflush %0" :: "m"(*ptrToFlush) : "memory");
+    };
+
+    Vector<void*> toFlush;
+
+    uint32_t offset = callFrame->argument(1).asUInt32();
+
+    if (JSArrayBufferView* view = jsDynamicCast<JSArrayBufferView*>(vm, callFrame->argument(0)))
+        toFlush.append(bitwise_cast<char*>(view->vector()) + offset);
+    else if (JSObject* object = jsDynamicCast<JSObject*>(vm, callFrame->argument(0))) {
+        switch (object->indexingType()) {
+        case ALL_INT32_INDEXING_TYPES:
+        case ALL_CONTIGUOUS_INDEXING_TYPES:
+        case ALL_DOUBLE_INDEXING_TYPES:
+            toFlush.append(bitwise_cast<char*>(object->butterfly()) + Butterfly::offsetOfVectorLength());
+            toFlush.append(bitwise_cast<char*>(object->butterfly()) + Butterfly::offsetOfPublicLength());
+        }
+    }
+
+    if (!toFlush.size())
+        return JSValue::encode(jsBoolean(false));
+
+    for (void* ptr : toFlush)
+        clflush(ptr);
+    return JSValue::encode(jsBoolean(true));
 }
 
 } // namespace JSC
