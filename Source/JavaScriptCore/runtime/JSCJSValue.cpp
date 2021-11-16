@@ -284,6 +284,9 @@ void JSValue::dumpInContextAssumingStructure(
         out.printf("Double: %08x:%08x, %lf", u.asTwoInt32s[1], u.asTwoInt32s[0], asDouble());
 #endif
     } else if (isCell()) {
+        // nosajmik: print RawPointer for all child classes of JSCell
+        // (this includes JSString)
+        out.print("[RawPointer: ", RawPointer(asCell()), "] ");
         if (structure->classInfo()->isSubClassOf(JSString::info())) {
             JSString* string = asString(asCell());
             out.print("String");
