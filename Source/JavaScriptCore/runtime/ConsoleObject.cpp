@@ -494,6 +494,11 @@ JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncJlflush, (JSGlobalObject* globalObject,
             toFlush.append(bitwise_cast<char*>(object->butterfly()) + Butterfly::offsetOfVectorLength());
             toFlush.append(bitwise_cast<char*>(object->butterfly()) + Butterfly::offsetOfPublicLength());
         }
+    } else if (JSString* string = jsDynamicCast<JSString*>(vm, callFrame->argument(0))) {
+        // nosajmik: flush length of JSString. Need to get the StringImpl object.
+        // JSString: first 4 bytes are StructureID, next 4 bytes are GC header, next 8 bytes are StringImpl ptr.
+        // StringImpl: first 4 bytes are RefCount, next 4 bytes are length (what we're looking for).
+        toFlush.append(bitwise_cast<char*>(string->getValueImpl()) + 4);
     }
 
     if (!toFlush.size())
