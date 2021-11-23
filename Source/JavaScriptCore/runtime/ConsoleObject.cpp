@@ -79,6 +79,7 @@ static JSC_DECLARE_HOST_FUNCTION(consoleProtoFuncScreenshot);
  */
 static JSC_DECLARE_HOST_FUNCTION(consoleProtoFuncDescribe);
 static JSC_DECLARE_HOST_FUNCTION(consoleProtoFuncJlflush);
+static JSC_DECLARE_HOST_FUNCTION(consoleProtoFuncTypeflush);
 
 const ClassInfo ConsoleObject::s_info = { "console", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(ConsoleObject) };
 
@@ -128,6 +129,7 @@ void ConsoleObject::finishCreation(VM& vm, JSGlobalObject* globalObject)
      */
     JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("describe", consoleProtoFuncDescribe, static_cast<unsigned>(PropertyAttribute::None), 0);
     JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("jlflush", consoleProtoFuncJlflush, static_cast<unsigned>(PropertyAttribute::None), 0);
+    JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("typeflush", consoleProtoFuncTypeflush, static_cast<unsigned>(PropertyAttribute::None), 0);
 
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
@@ -497,6 +499,33 @@ JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncJlflush, (JSGlobalObject* globalObject,
     } else if (JSString* string = jsDynamicCast<JSString*>(vm, callFrame->argument(0))) {
         // nosajmik: flush length of JSString.
         toFlush.append(bitwise_cast<char*>(string->getValueImpl()) + string->getValueImpl()->lengthMemoryOffset());
+    }
+
+    if (!toFlush.size())
+        return JSValue::encode(jsBoolean(false));
+
+    for (void* ptr : toFlush)
+        clflush(ptr);
+    return JSValue::encode(jsBoolean(true));
+}
+
+/*
+ nosajmik: host function definition for cpuClflush() port from Dollar VM
+ for flushing the structureID ONLY, for type confusion
+ */
+JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncTypeflush, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    VM& vm = globalObject->vm();
+
+    auto clflush = [] (void* ptr) {
+        char* ptrToFlush = static_cast<char*>(ptr);
+        asm volatile ("clflush %0" :: "m"(*ptrToFlush) : "memory");
+    };
+
+    Vector<void*> toFlush;
+
+    if (JSCell* cell = jsDynamicCast<JSCell*>(vm, callFrame->argument(0))) {
+        toFlush.append(bitwise_cast<char*>(cell) + cell->structureIDOffset());
     }
 
     if (!toFlush.size())

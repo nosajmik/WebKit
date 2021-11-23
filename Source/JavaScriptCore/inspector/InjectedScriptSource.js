@@ -1548,7 +1548,7 @@ CommandLineAPI.methods["warn"] = function() { return inspectedGlobalObject.conso
  */
 CommandLineAPI.methods["describe"] = function() { return inspectedGlobalObject.console.describe(...arguments); };
 CommandLineAPI.methods["jlflush"] = function() { return inspectedGlobalObject.console.jlflush(...arguments); };
-
+CommandLineAPI.methods["typeflush"] = function() { return inspectedGlobalObject.console.typeflush(...arguments); };
 
 for (let name in CommandLineAPI.methods)
     CommandLineAPI.methods[name].toString = function() { return "function " + name + "() { [Command Line API] }"; };
