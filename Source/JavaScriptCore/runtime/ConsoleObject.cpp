@@ -515,7 +515,7 @@ JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncJlflush, (JSGlobalObject* globalObject,
  */
 JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncTypeflush, (JSGlobalObject* globalObject, CallFrame* callFrame))
 {
-    VM& vm = globalObject->vm();
+    // VM& vm = globalObject->vm();
 
     auto clflush = [] (void* ptr) {
         char* ptrToFlush = static_cast<char*>(ptr);
