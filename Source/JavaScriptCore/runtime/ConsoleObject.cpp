@@ -524,8 +524,11 @@ JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncTypeflush, (JSGlobalObject* globalObjec
 
     Vector<void*> toFlush;
 
-    if (JSCell* cell = jsDynamicCast<JSCell*>(vm, callFrame->argument(0))) {
-        toFlush.append(bitwise_cast<char*>(cell) + cell->structureIDOffset());
+    // nosajmik: callFrame->argument() calls CallFrame::getArgumentUnsafe(),
+    // which returns JSValue (not pointer to JSValue)! JSValue can directly check
+    // if it is a JSCell itself without needing jsDynamicCast (this will throw an error).
+    if (callFrame->argument(0).isCell()) {
+        toFlush.append(bitwise_cast<char*>(callFrame->argument(0).asCell()) + callFrame->argument(0).asCell()->structureIDOffset());
     }
 
     if (!toFlush.size())
