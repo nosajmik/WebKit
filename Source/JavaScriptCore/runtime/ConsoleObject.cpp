@@ -535,11 +535,11 @@ JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncTypeflush, (JSGlobalObject* globalObjec
     }
 
     if (!toFlush.size())
-        return JSValue::encode(jsBoolean(false));
+        return JSValue::encode(jsUndefined());
 
-    for (void* ptr : toFlush)
+    for (const void* ptr : toFlush)
         clflush(ptr);
-    return JSValue::encode(jsBoolean(true));
+        return JSValue::encode(jsNumber((long)ptr));
 }
 
 } // namespace JSC
