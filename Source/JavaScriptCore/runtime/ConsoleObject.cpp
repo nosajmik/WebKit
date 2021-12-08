@@ -528,7 +528,7 @@ JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncTypeflush, (JSGlobalObject* globalObjec
     // which returns JSValue (not pointer to JSValue)! JSValue can directly check
     // if it is a JSCell itself without needing jsDynamicCast (this will throw an error).
     if (callFrame->argument(0).isCell()) {
-        toFlush.append(bitwise_cast<char*>(callFrame->argument(0).asCell()) + callFrame->argument(0).asCell()->structureIDOffset());
+        toFlush.append(bitwise_cast<char*>(callFrame->argument(0).asCell()) + callFrame->argument(0).asCell()->typeInfoTypeOffset());
     } else if (JSObject* object = jsDynamicCast<JSObject*>(vm, callFrame->argument(0))) {
         // This is only here to make the compiler shut up about unused vars/params.
         asm volatile ("nop");
