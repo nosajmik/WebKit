@@ -2035,6 +2035,7 @@ static JSC_DECLARE_HOST_FUNCTION(functionCpuRdtsc);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuCpuid);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuPause);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuClflush);
+static JSC_DECLARE_HOST_FUNCTION(functionNativeTraverse);
 static JSC_DECLARE_HOST_FUNCTION(functionLLintTrue);
 static JSC_DECLARE_HOST_FUNCTION(functionBaselineJITTrue);
 static JSC_DECLARE_HOST_FUNCTION(functionNoInline);
@@ -2311,6 +2312,49 @@ JSC_DEFINE_HOST_FUNCTION(functionCpuClflush, (JSGlobalObject* globalObject, Call
     UNUSED_PARAM(callFrame);
     return JSValue::encode(jsBoolean(false));
 #endif
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionNativeTraverse, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    VM& vm = globalObject->vm();
+
+    // Access first 8 bytes of JSCell header (which contains the type)
+    volatile uint64_t *cptr = bitwise_cast<uint64_t*>(callFrame->argument(0).asCell());
+    // TODO: need the arm64 equivalent of this
+    // __asm__ volatile ("movq (%0), %%rax\n" :: "c" (cptr) : "rax");
+
+    // Linked list traversal
+    if (JSArrayBufferView* view = jsDynamicCast<JSArrayBufferView*>(vm, callFrame->argument(1))) {
+        void *vector = view->vector();
+        uint32_t *base = static_cast<uint32_t*>(vector);
+
+        JSValue headVal = callFrame->argument(2);
+        uint32_t head = headVal.asInt32();
+
+        // TODO: need the arm64 equivalent of this
+        // I can get traversal instructions by looking at OMG disassembly of wasm traverse
+        // __asm__ volatile
+        // (
+        //     "movq %0, %%r14;"
+        //     "movl %1, %%esi;"
+        //     "loop:"
+        //     "movl %%esi, %%eax;"
+        //     "movq (%%r14, %%rax), %%rsi;"
+        //     "test %%rsi, %%rsi;"
+        //     "jnz loop;"
+        //     : // no output
+        //     : "b" (base), "c" (head)
+        //     : "%r14", "%rsi", "%rax"
+        // );
+    }
+
+    // Trigger page walk such that victim is paged in but not cached
+    volatile uint8_t *byteptr = (volatile uint8_t*)cptr;
+    byteptr = byteptr + 222;
+    // TODO: need the arm64 equivalent of this
+    // __asm__ volatile ("movq (%0), %%rax\n" :: "c" (cptr) : "rax");
+
+    return JSValue::encode(jsNumber(0));
 }
 
 class CallerFrameJITTypeFunctor {
@@ -3879,6 +3923,7 @@ void JSDollarVM::finishCreation(VM& vm)
     putDirectNativeFunction(vm, globalObject, Identifier::fromString(vm, "cpuCpuid"), 0, functionCpuCpuid, CPUCpuidIntrinsic, jsDollarVMPropertyAttributes);
     putDirectNativeFunction(vm, globalObject, Identifier::fromString(vm, "cpuPause"), 0, functionCpuPause, CPUPauseIntrinsic, jsDollarVMPropertyAttributes);
     addFunction(vm, "cpuClflush", functionCpuClflush, 2);
+    addFunction(vm, "nativeTraverse", functionNativeTraverse, 3);
 
     addFunction(vm, "llintTrue", functionLLintTrue, 0);
     addFunction(vm, "baselineJITTrue", functionBaselineJITTrue, 0);
