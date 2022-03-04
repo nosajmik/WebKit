@@ -227,6 +227,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1C60FE2F14E5F3CD006CD77D /* Base.xcconfig */;
 			buildSettings = {
+				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Production;
 		};
@@ -241,6 +242,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1C60FE3114E5F3CD006CD77D /* DebugRelease.xcconfig */;
 			buildSettings = {
+				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Debug;
 		};
@@ -248,6 +250,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1C60FE3114E5F3CD006CD77D /* DebugRelease.xcconfig */;
 			buildSettings = {
+				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Release;
 		};

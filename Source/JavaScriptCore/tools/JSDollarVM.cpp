@@ -79,6 +79,11 @@
 #include "WasmStreamingParser.h"
 #endif
 
+// nosajmik: includes for Stephan's high res M1 timer
+#include <dlfcn.h>
+#include <inttypes.h>
+#include <stdint.h>
+
 using namespace JSC;
 
 IGNORE_WARNINGS_BEGIN("frame-address")
@@ -2230,18 +2235,57 @@ JSC_DEFINE_HOST_FUNCTION(functionCpuMfence, (JSGlobalObject*, CallFrame*))
     return JSValue::encode(jsUndefined());
 }
 
+// JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
+// {
+//     DollarVMAssertScope assertScope;
+// #if CPU(X86_64) && !OS(WINDOWS)
+//     unsigned high;
+//     unsigned low;
+//     asm volatile ("rdtsc" : "=a"(low), "=d"(high));
+//     return JSValue::encode(jsNumber(low));
+// #else
+//     return JSValue::encode(jsNumber(0));
+// #endif
+// }
+
 JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
 {
-    DollarVMAssertScope assertScope;
-#if CPU(X86_64) && !OS(WINDOWS)
-    unsigned high;
-    unsigned low;
-    asm volatile ("rdtsc" : "=a"(low), "=d"(high));
-    return JSValue::encode(jsNumber(low));
-#else
-    return JSValue::encode(jsNumber(0));
-#endif
+    // jsc or WebKit MUST BE RUN AS ROOT for this to work.
+    const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
+    void *kperf_lib = NULL;
+    int (*kpc_get_thread_counters)(int, unsigned, uint64_t *) = NULL;
+
+    // The array size is the size of the entire array divided by the size of the
+    // first element, i.e. this macro expands to the number of elements in the
+    // array.
+    #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+    // We cannot open the KPC API provided by the kernel ourselves directly.
+	// Instead we rely on the kperf framework which is entitled to access
+	// this API.
+	kperf_lib = dlopen(kperf_path, RTLD_LAZY);
+    
+    if (!kperf_lib) {
+        // return undefined to user since printing doesn't work very well here
+        return JSValue::encode(jsUndefined());
+    }
+
+    // Look up kpc_get_thread_counters.
+    // Need to do some casting here because compiler will complain about
+    // assigning void pointer to function pointer
+	*(void **)(&kpc_get_thread_counters) = dlsym(kperf_lib, "kpc_get_thread_counters");
+
+	// Read the counters BUT with serialization barrier
+	uint64_t counters[10];
+    
+    asm volatile ("isb sy");
+    kpc_get_thread_counters(0, ARRAY_SIZE(counters), counters);
+    asm volatile ("isb sy");
+
+    return JSValue::encode(jsNumber(counters[2]));
 }
+
+
 
 JSC_DEFINE_HOST_FUNCTION(functionCpuCpuid, (JSGlobalObject*, CallFrame*))
 {
