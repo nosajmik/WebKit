@@ -35,6 +35,7 @@
 #include <dlfcn.h>
 #include <inttypes.h>
 #include <stdint.h>
+#include <unistd.h>
 
 namespace JSC {
 
@@ -83,6 +84,8 @@ static JSC_DECLARE_HOST_FUNCTION(consoleProtoFuncScreenshot);
 // Porting to full Safari runtime
 static JSC_DECLARE_HOST_FUNCTION(functionCpuRdtsc);
 static JSC_DECLARE_HOST_FUNCTION(functionTimeWasmMemAccessM1);
+static JSC_DECLARE_HOST_FUNCTION(functionGetuid);
+static JSC_DECLARE_HOST_FUNCTION(functionGeteuid);
 
 const ClassInfo ConsoleObject::s_info = { "console", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(ConsoleObject) };
 
@@ -131,6 +134,8 @@ void ConsoleObject::finishCreation(VM& vm, JSGlobalObject* globalObject)
     // These will become console.rdtsc() and console.timeAccess()
     JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("rdtsc", functionCpuRdtsc, static_cast<unsigned>(PropertyAttribute::None), 0);
     JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("timeAccess", functionTimeWasmMemAccessM1, static_cast<unsigned>(PropertyAttribute::None), 0);
+    JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("getuid", functionGetuid, static_cast<unsigned>(PropertyAttribute::None), 0);
+    JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("geteuid", functionGeteuid, static_cast<unsigned>(PropertyAttribute::None), 0);
 
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
@@ -559,6 +564,16 @@ JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessM1, (JSGlobalObject* globalObj
     }
 
     return JSValue::encode(jsUndefined());
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionGetuid, (JSGlobalObject*, CallFrame*))
+{
+    return JSValue::encode(jsNumber(getuid()));
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionGeteuid, (JSGlobalObject*, CallFrame*))
+{
+    return JSValue::encode(jsNumber(geteuid()));
 }
 
 } // namespace JSC
