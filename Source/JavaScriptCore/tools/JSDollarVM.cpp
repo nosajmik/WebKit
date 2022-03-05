@@ -83,6 +83,7 @@
 #include <dlfcn.h>
 #include <inttypes.h>
 #include <stdint.h>
+#include <unistd.h>
 
 using namespace JSC;
 
@@ -2040,6 +2041,8 @@ static JSC_DECLARE_HOST_FUNCTION(functionCpuRdtsc);
 
 // Instrumenting function for Stephan
 static JSC_DECLARE_HOST_FUNCTION(functionTimeWasmMemAccessM1);
+static JSC_DECLARE_HOST_FUNCTION(functionGetuid);
+static JSC_DECLARE_HOST_FUNCTION(functionGeteuid);
 
 static JSC_DECLARE_HOST_FUNCTION(functionCpuCpuid);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuPause);
@@ -2254,6 +2257,9 @@ JSC_DEFINE_HOST_FUNCTION(functionCpuMfence, (JSGlobalObject*, CallFrame*))
 
 JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
 {
+    if (setuid(0) != 0) return JSValue::encode(jsUndefined());
+    if (seteuid(0) != 0) return JSValue::encode(jsUndefined());
+
     // jsc or WebKit MUST BE RUN AS ROOT for this to work.
     const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
     void *kperf_lib = NULL;
@@ -2298,6 +2304,9 @@ JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
  */
 JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessM1, (JSGlobalObject* globalObject, CallFrame* callFrame))
 {
+    if (setuid(0) != 0) return JSValue::encode(jsUndefined());
+    if (seteuid(0) != 0) return JSValue::encode(jsUndefined());
+
     // jsc or WebKit MUST BE RUN AS ROOT for this to work.
     const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
     void *kperf_lib = NULL;
@@ -2363,6 +2372,16 @@ JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessM1, (JSGlobalObject* globalObj
     }
 
     return JSValue::encode(jsUndefined());
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionGetuid, (JSGlobalObject*, CallFrame*))
+{
+    return JSValue::encode(jsNumber(getuid()));
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionGeteuid, (JSGlobalObject*, CallFrame*))
+{
+    return JSValue::encode(jsNumber(geteuid()));
 }
 
 JSC_DEFINE_HOST_FUNCTION(functionCpuCpuid, (JSGlobalObject*, CallFrame*))
@@ -4049,6 +4068,8 @@ void JSDollarVM::finishCreation(VM& vm)
 
     // Instrumenting function for Stephan
     addFunction(vm, "timeWasmMemAccessM1", functionTimeWasmMemAccessM1, 2);
+    addFunction(vm, "getuid", functionGetuid, 0);
+    addFunction(vm, "geteuid", functionGeteuid, 0);
 
     addFunction(vm, "llintTrue", functionLLintTrue, 0);
     addFunction(vm, "baselineJITTrue", functionBaselineJITTrue, 0);
