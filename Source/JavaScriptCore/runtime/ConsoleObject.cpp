@@ -456,9 +456,9 @@ JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncScreenshot, (JSGlobalObject* globalObje
 JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
 {
     // jsc or WebKit MUST BE RUN AS ROOT for this to work.
-    const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
-    void *kperf_lib = NULL;
-    int (*kpc_get_thread_counters)(int, unsigned, uint64_t *) = NULL;
+    volatile const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
+    volatile void *kperf_lib = NULL;
+    volatile int (*kpc_get_thread_counters)(int, unsigned, uint64_t *) = NULL;
 
     // The array size is the size of the entire array divided by the size of the
     // first element, i.e. this macro expands to the number of elements in the
@@ -481,7 +481,7 @@ JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
 	*(void **)(&kpc_get_thread_counters) = dlsym(kperf_lib, "kpc_get_thread_counters");
 
 	// Read the counters BUT with serialization barrier
-	uint64_t counters[10];
+	volatile uint64_t counters[10];
     
     asm volatile ("isb sy");
     kpc_get_thread_counters(0, ARRAY_SIZE(counters), counters);
@@ -500,9 +500,9 @@ JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
 JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessM1, (JSGlobalObject* globalObject, CallFrame* callFrame))
 {
     // jsc or WebKit MUST BE RUN AS ROOT for this to work.
-    const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
-    void *kperf_lib = NULL;
-    int (*kpc_get_thread_counters)(int, unsigned, uint64_t *) = NULL;
+    volatile const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
+    volatile void *kperf_lib = NULL;
+    volatile int (*kpc_get_thread_counters)(int, unsigned, uint64_t *) = NULL;
 
     // The array size is the size of the entire array divided by the size of the
     // first element, i.e. this macro expands to the number of elements in the
@@ -529,8 +529,8 @@ JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessM1, (JSGlobalObject* globalObj
 
 	// Storage space for performance counters on two timestamps.
     // Read with serialization on both sides.
-	uint64_t counters_before[10];
-    uint64_t counters_after[10];
+	volatile uint64_t counters_before[10];
+    volatile uint64_t counters_after[10];
 
     // WebAssembly memory is an ArrayBuffer
     if (JSArrayBufferView* view = jsDynamicCast<JSArrayBufferView*>(vm, callFrame->argument(0))) {
