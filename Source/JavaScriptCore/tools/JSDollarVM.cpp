@@ -2260,7 +2260,7 @@ JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
     // jsc or WebKit MUST BE RUN AS ROOT for this to work.
     volatile const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
     volatile void *kperf_lib = NULL;
-    volatile int (*kpc_get_thread_counters)(int, unsigned, uint64_t *) = NULL;
+    volatile int (*kpc_get_thread_counters)(int, unsigned, volatile uint64_t *) = NULL;
 
     // The array size is the size of the entire array divided by the size of the
     // first element, i.e. this macro expands to the number of elements in the
@@ -2304,7 +2304,7 @@ JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessM1, (JSGlobalObject* globalObj
     // jsc or WebKit MUST BE RUN AS ROOT for this to work.
     volatile const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
     volatile void *kperf_lib = NULL;
-    volatile int (*kpc_get_thread_counters)(int, unsigned, uint64_t *) = NULL;
+    volatile int (*kpc_get_thread_counters)(int, unsigned, volatile uint64_t *) = NULL;
 
     // The array size is the size of the entire array divided by the size of the
     // first element, i.e. this macro expands to the number of elements in the
