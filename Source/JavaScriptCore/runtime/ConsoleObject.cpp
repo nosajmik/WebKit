@@ -456,8 +456,8 @@ JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncScreenshot, (JSGlobalObject* globalObje
 JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
 {
     // jsc or WebKit MUST BE RUN AS ROOT for this to work.
-    volatile const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
-    volatile void *kperf_lib = NULL;
+    const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
+    void *kperf_lib = NULL;
     volatile int (*kpc_get_thread_counters)(int, unsigned, volatile uint64_t *) = NULL;
 
     // The array size is the size of the entire array divided by the size of the
@@ -500,8 +500,8 @@ JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
 JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessM1, (JSGlobalObject* globalObject, CallFrame* callFrame))
 {
     // jsc or WebKit MUST BE RUN AS ROOT for this to work.
-    volatile const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
-    volatile void *kperf_lib = NULL;
+    const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
+    void *kperf_lib = NULL;
     volatile int (*kpc_get_thread_counters)(int, unsigned, volatile uint64_t *) = NULL;
 
     // The array size is the size of the entire array divided by the size of the
