@@ -455,9 +455,6 @@ JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncScreenshot, (JSGlobalObject* globalObje
 
 JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
 {
-    if (setuid(0) != 0) return JSValue::encode(jsUndefined());
-    if (seteuid(0) != 0) return JSValue::encode(jsUndefined());
-
     // jsc or WebKit MUST BE RUN AS ROOT for this to work.
     const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
     void *kperf_lib = NULL;
@@ -502,9 +499,6 @@ JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
  */
 JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessM1, (JSGlobalObject* globalObject, CallFrame* callFrame))
 {
-    if (setuid(0) != 0) return JSValue::encode(jsUndefined());
-    if (seteuid(0) != 0) return JSValue::encode(jsUndefined());
-
     // jsc or WebKit MUST BE RUN AS ROOT for this to work.
     const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
     void *kperf_lib = NULL;
