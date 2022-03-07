@@ -2344,9 +2344,9 @@ JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessM1, (JSGlobalObject* globalObj
 
     // WebAssembly memory is an ArrayBuffer
     if (JSArrayBufferView* view = jsDynamicCast<JSArrayBufferView*>(vm, callFrame->argument(0))) {
-        volatile void *vector = view->vector();
+        // volatile void *vector = view->vector();
         // For testing in the future against PAC code, this may be worth trying
-        // volatile void *vector = view->vectorWithoutPACValidation();
+        volatile void *vector = view->vectorWithoutPACValidation();
 
         volatile uint8_t *wasmMemoryBasePtr = static_cast<volatile uint8_t*>(vector);
         
@@ -2362,7 +2362,8 @@ JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessM1, (JSGlobalObject* globalObj
         asm volatile ("isb sy");
 
         // Target access
-        asm volatile("ldrb w0, [%[input]]" :: [input] "r" (target) : "w0");
+        // asm volatile("ldrb w0, [%[input]]" :: [input] "r" (target) : "w0");
+        *(volatile char *) target;
         asm volatile("dsb ish"); // lfence
 
         // Timestamp 2
