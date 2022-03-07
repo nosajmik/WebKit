@@ -31,12 +31,6 @@
 #include "ScriptArguments.h"
 #include "ScriptCallStackFactory.h"
 
-// nosajmik: includes for Stephan's high res M1 timer
-#include <dlfcn.h>
-#include <inttypes.h>
-#include <stdint.h>
-#include <unistd.h>
-
 namespace JSC {
 
 static String valueOrDefaultLabelString(JSGlobalObject* globalObject, CallFrame* callFrame)
@@ -80,13 +74,6 @@ static JSC_DECLARE_HOST_FUNCTION(consoleProtoFuncRecord);
 static JSC_DECLARE_HOST_FUNCTION(consoleProtoFuncRecordEnd);
 static JSC_DECLARE_HOST_FUNCTION(consoleProtoFuncScreenshot);
 
-// Stephan's high precision timer and instrument functions
-// Porting to full Safari runtime
-static JSC_DECLARE_HOST_FUNCTION(functionCpuRdtsc);
-static JSC_DECLARE_HOST_FUNCTION(functionTimeWasmMemAccessM1);
-static JSC_DECLARE_HOST_FUNCTION(functionGetuid);
-static JSC_DECLARE_HOST_FUNCTION(functionGeteuid);
-
 const ClassInfo ConsoleObject::s_info = { "console", &Base::s_info, nullptr, nullptr, CREATE_METHOD_TABLE(ConsoleObject) };
 
 ConsoleObject::ConsoleObject(VM& vm, Structure* structure)
@@ -129,13 +116,6 @@ void ConsoleObject::finishCreation(VM& vm, JSGlobalObject* globalObject)
     JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("record", consoleProtoFuncRecord, static_cast<unsigned>(PropertyAttribute::None), 0);
     JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("recordEnd", consoleProtoFuncRecordEnd, static_cast<unsigned>(PropertyAttribute::None), 0);
     JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("screenshot", consoleProtoFuncScreenshot, static_cast<unsigned>(PropertyAttribute::None), 0);
-
-    // Stephan's high precision timer and instrument functions
-    // These will become console.rdtsc() and console.timeAccess()
-    JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("rdtsc", functionCpuRdtsc, static_cast<unsigned>(PropertyAttribute::None), 0);
-    JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("timeAccess", functionTimeWasmMemAccessM1, static_cast<unsigned>(PropertyAttribute::None), 0);
-    JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("getuid", functionGetuid, static_cast<unsigned>(PropertyAttribute::None), 0);
-    JSC_NATIVE_FUNCTION_WITHOUT_TRANSITION("geteuid", functionGeteuid, static_cast<unsigned>(PropertyAttribute::None), 0);
 
     JSC_TO_STRING_TAG_WITHOUT_TRANSITION();
 }
@@ -451,129 +431,6 @@ JSC_DEFINE_HOST_FUNCTION(consoleProtoFuncScreenshot, (JSGlobalObject* globalObje
 
     client->screenshot(globalObject, Inspector::createScriptArguments(globalObject, callFrame, 0));
     return JSValue::encode(jsUndefined());
-}
-
-JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
-{
-    // jsc or WebKit MUST BE RUN AS ROOT for this to work.
-    const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
-    void *kperf_lib = NULL;
-    volatile int (*kpc_get_thread_counters)(int, unsigned, volatile uint64_t *) = NULL;
-
-    // The array size is the size of the entire array divided by the size of the
-    // first element, i.e. this macro expands to the number of elements in the
-    // array.
-    #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-
-    // We cannot open the KPC API provided by the kernel ourselves directly.
-	// Instead we rely on the kperf framework which is entitled to access
-	// this API.
-	kperf_lib = dlopen(kperf_path, RTLD_LAZY);
-    
-    if (!kperf_lib) {
-        // return undefined to user since printing doesn't work very well here
-        return JSValue::encode(jsUndefined());
-    }
-
-    // Look up kpc_get_thread_counters.
-    // Need to do some casting here because compiler will complain about
-    // assigning void pointer to function pointer
-	*(void **)(&kpc_get_thread_counters) = dlsym(kperf_lib, "kpc_get_thread_counters");
-
-	// Read the counters BUT with serialization barrier
-	volatile uint64_t counters[10];
-    
-    asm volatile ("isb sy");
-    kpc_get_thread_counters(0, ARRAY_SIZE(counters), counters);
-    asm volatile ("isb sy");
-
-    return JSValue::encode(jsNumber(counters[2]));
-}
-
-/*
- This cheating function is similar to functionCpuRdtsc above
- (called from jsc as $vm.cpuRdtsc), but instead of simply returning
- the timestamp it will measure the access time to touch an index
- in wasm memory. Use as: $vm.timeWasmMemAccessM1(mem, wasmMemAddress)
- where mem is a WebAssembly.Memory object and wasmMemAddress is an int32.
- */
-JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessM1, (JSGlobalObject* globalObject, CallFrame* callFrame))
-{
-    // jsc or WebKit MUST BE RUN AS ROOT for this to work.
-    const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
-    void *kperf_lib = NULL;
-    volatile int (*kpc_get_thread_counters)(int, unsigned, volatile uint64_t *) = NULL;
-
-    // The array size is the size of the entire array divided by the size of the
-    // first element, i.e. this macro expands to the number of elements in the
-    // array.
-    #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-
-    // We cannot open the KPC API provided by the kernel ourselves directly.
-	// Instead we rely on the kperf framework which is entitled to access
-	// this API.
-	kperf_lib = dlopen(kperf_path, RTLD_LAZY);
-    
-    if (!kperf_lib) {
-        // return undefined to user since printing doesn't work very well here
-        return JSValue::encode(jsUndefined());
-    }
-
-    // Look up kpc_get_thread_counters.
-    // Need to do some casting here because compiler will complain about
-    // assigning void pointer to function pointer
-	*(void **)(&kpc_get_thread_counters) = dlsym(kperf_lib, "kpc_get_thread_counters");
-
-    // Prep work to access variables passed in from JS runtime
-    VM& vm = globalObject->vm();
-
-	// Storage space for performance counters on two timestamps.
-    // Read with serialization on both sides.
-	volatile uint64_t counters_before[10];
-    volatile uint64_t counters_after[10];
-
-    // WebAssembly memory is an ArrayBuffer
-    if (JSArrayBufferView* view = jsDynamicCast<JSArrayBufferView*>(vm, callFrame->argument(0))) {
-        volatile void *vector = view->vector();
-        // For testing in the future against PAC code, this may be worth trying
-        // volatile void *vector = view->vectorWithoutPACValidation();
-
-        volatile uint8_t *wasmMemoryBasePtr = static_cast<volatile uint8_t*>(vector);
-        
-        // Need to convert address from a NaN-boxed JSC value to int in C++
-        JSValue addrValue = callFrame->argument(2);
-        volatile uint32_t addr = addrValue.asUInt32();
-
-        volatile uint8_t *target = wasmMemoryBasePtr + addr;
-
-        // Timestamp 1
-        asm volatile ("isb sy");
-        kpc_get_thread_counters(0, ARRAY_SIZE(counters_before), counters_before);
-        asm volatile ("isb sy");
-
-        // Target access
-        asm volatile("ldrb w0, [%[input]]" :: [input] "r" (target) : "w0");
-        asm volatile("dsb ish"); // lfence
-
-        // Timestamp 2
-        asm volatile ("isb sy");
-        kpc_get_thread_counters(0, ARRAY_SIZE(counters_after), counters_after);
-        asm volatile ("isb sy");
-
-        return JSValue::encode(jsNumber(counters_after[2] - counters_before[2]));
-    }
-
-    return JSValue::encode(jsUndefined());
-}
-
-JSC_DEFINE_HOST_FUNCTION(functionGetuid, (JSGlobalObject*, CallFrame*))
-{
-    return JSValue::encode(jsNumber(getuid()));
-}
-
-JSC_DEFINE_HOST_FUNCTION(functionGeteuid, (JSGlobalObject*, CallFrame*))
-{
-    return JSValue::encode(jsNumber(geteuid()));
 }
 
 } // namespace JSC
