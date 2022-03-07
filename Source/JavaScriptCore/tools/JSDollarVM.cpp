@@ -2351,7 +2351,7 @@ JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessM1, (JSGlobalObject* globalObj
         volatile uint8_t *wasmMemoryBasePtr = static_cast<volatile uint8_t*>(vector);
         
         // Need to convert address from a NaN-boxed JSC value to int in C++
-        JSValue addrValue = callFrame->argument(2);
+        JSValue addrValue = callFrame->argument(1);
         volatile uint32_t addr = addrValue.asUInt32();
 
         volatile uint8_t *target = wasmMemoryBasePtr + addr;
