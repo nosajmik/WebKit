@@ -2258,7 +2258,7 @@ JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessIntel, (JSGlobalObject* global
 
     // Storage space for performance counters on two timestamps
     volatile uint64_t loBefore, hiBefore, ts1;
-    volatile uint64_t loAfter, hiAfter; ts2;
+    volatile uint64_t loAfter, hiAfter, ts2;
 
     // WebAssembly memory is an ArrayBuffer
     if (JSArrayBufferView* view = jsDynamicCast<JSArrayBufferView*>(vm, callFrame->argument(0))) {
