@@ -2032,6 +2032,10 @@ static JSC_DECLARE_HOST_FUNCTION(functionDFGTrue);
 static JSC_DECLARE_HOST_FUNCTION(functionFTLTrue);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuMfence);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuRdtsc);
+
+// Instrumenting function for Stephan
+static JSC_DECLARE_HOST_FUNCTION(functionTimeWasmMemAccessIntel);
+
 static JSC_DECLARE_HOST_FUNCTION(functionCpuCpuid);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuPause);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuClflush);
@@ -2240,6 +2244,52 @@ JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
 #else
     return JSValue::encode(jsNumber(0));
 #endif
+}
+
+/*
+ Call from JavaScript as $vm.functionTimeWasmMemAccessIntel(view, wasmMemAddress).
+ Returns the access time to touch an index in wasm memory. In the above, view is a 
+ DataView for a WebAssembly.Memory object.
+ */
+JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessIntel, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    // Prep work to access variables passed in from JS runtime
+    VM& vm = globalObject->vm();
+
+    // Storage space for performance counters on two timestamps
+    volatile uint64_t loBefore, hiBefore, ts1;
+    volatile uint64_t loAfter, hiAfter; ts2;
+
+    // WebAssembly memory is an ArrayBuffer
+    if (JSArrayBufferView* view = jsDynamicCast<JSArrayBufferView*>(vm, callFrame->argument(0))) {
+        // volatile void *vector = view->vector();
+        // For testing in the future against PAC code, this may be worth trying
+        volatile void *vector = view->vectorWithoutPACValidation();
+
+        volatile uint8_t *wasmMemoryBasePtr = static_cast<volatile uint8_t*>(vector);
+
+        // Need to convert address from a NaN-boxed JSC value to an int in C++
+        JSValue addrValue = callFrame->argument(1);
+        volatile uint32_t addr = addrValue.asUInt32();
+
+        volatile uint8_t *target = wasmMemoryBasePtr + addr;
+
+        // Timestamp 1
+        asm volatile("rdtscp" : "=a" (loBefore), "=d" (hiBefore) :: "%ecx");
+
+        // Target access
+        *(volatile char *) target;
+        asm volatile("lfence" ::: "memory");
+
+        // Timestamp 2
+        asm volatile("rdtscp" : "=a" (loAfter), "=d" (hiAfter) :: "%ecx");
+
+        ts1 = (hiBefore << 32) + loBefore;
+        ts2 = (hiAfter << 32) + loAfter;
+        return JSValue::encode(jsNumber(ts2 - ts1));
+    }
+
+    return JSValue::encode(jsUndefined());
 }
 
 JSC_DEFINE_HOST_FUNCTION(functionCpuCpuid, (JSGlobalObject*, CallFrame*))
@@ -3879,6 +3929,9 @@ void JSDollarVM::finishCreation(VM& vm)
     putDirectNativeFunction(vm, globalObject, Identifier::fromString(vm, "cpuCpuid"), 0, functionCpuCpuid, CPUCpuidIntrinsic, jsDollarVMPropertyAttributes);
     putDirectNativeFunction(vm, globalObject, Identifier::fromString(vm, "cpuPause"), 0, functionCpuPause, CPUPauseIntrinsic, jsDollarVMPropertyAttributes);
     addFunction(vm, "cpuClflush", functionCpuClflush, 2);
+
+    // Instrumenting function for Stephan
+    addFunction(vm, "timeWasmMemAccessIntel", functionTimeWasmMemAccessIntel, 2);
 
     addFunction(vm, "llintTrue", functionLLintTrue, 0);
     addFunction(vm, "baselineJITTrue", functionBaselineJITTrue, 0);

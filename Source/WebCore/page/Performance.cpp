@@ -90,7 +90,9 @@ DOMHighResTimeStamp Performance::timeOrigin() const
 ReducedResolutionSeconds Performance::nowInReducedResolutionSeconds() const
 {
     Seconds now = MonotonicTime::now() - m_timeOrigin;
-    return reduceTimeResolution(now);
+    // return reduceTimeResolution(now);
+    // nosajmik: disable timer crippling
+    return now;
 }
 
 Seconds Performance::reduceTimeResolution(Seconds seconds)
