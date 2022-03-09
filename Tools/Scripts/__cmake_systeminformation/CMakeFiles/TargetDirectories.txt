@@ -1,0 +1,2 @@
+/Users/test/Downloads/Safari-15.1/Tools/Scripts/__cmake_systeminformation/CMakeFiles/edit_cache.dir
+/Users/test/Downloads/Safari-15.1/Tools/Scripts/__cmake_systeminformation/CMakeFiles/rebuild_cache.dir
