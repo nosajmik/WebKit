@@ -898,6 +898,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 44C48DFF14A4098F00A2D9C7 /* ProductionProject.xcconfig */;
 			buildSettings = {
+				EXCLUDED_ARCHS = arm64;
 			};
 			name = Production;
 		};
@@ -1009,6 +1010,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 40D4CDF10E30E07400294801 /* DebugProject.xcconfig */;
 			buildSettings = {
+				EXCLUDED_ARCHS = arm64;
 			};
 			name = Debug;
 		};
@@ -1016,6 +1018,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 40D4CDF40E30E07400294801 /* ReleaseProject.xcconfig */;
 			buildSettings = {
+				EXCLUDED_ARCHS = arm64;
 			};
 			name = Release;
 		};

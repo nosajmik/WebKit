@@ -3645,6 +3645,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1C904FD40BA9DD0F0081E9D0 /* DebugRelease.xcconfig */;
 			buildSettings = {
+				EXCLUDED_ARCHS = arm64;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Debug;
@@ -3653,6 +3654,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1C904FD40BA9DD0F0081E9D0 /* DebugRelease.xcconfig */;
 			buildSettings = {
+				EXCLUDED_ARCHS = arm64;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 				STRIP_INSTALLED_PRODUCT = NO;
 			};
@@ -3662,6 +3664,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1C904FD50BA9DD0F0081E9D0 /* Base.xcconfig */;
 			buildSettings = {
+				EXCLUDED_ARCHS = arm64;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Production;

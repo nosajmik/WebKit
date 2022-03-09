@@ -1389,6 +1389,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = BC793427118F7DAF005EA8E2 /* DebugRelease.xcconfig */;
 			buildSettings = {
+				EXCLUDED_ARCHS = arm64;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Debug;
@@ -1397,6 +1398,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = BC793427118F7DAF005EA8E2 /* DebugRelease.xcconfig */;
 			buildSettings = {
+				EXCLUDED_ARCHS = arm64;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Release;
@@ -1523,6 +1525,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = BC793426118F7D3C005EA8E2 /* Base.xcconfig */;
 			buildSettings = {
+				EXCLUDED_ARCHS = arm64;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Production;

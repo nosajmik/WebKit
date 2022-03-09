@@ -259,6 +259,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = BCA8CBDE11E578A000812FB7 /* DebugRelease.xcconfig */;
 			buildSettings = {
+				EXCLUDED_ARCHS = arm64;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
@@ -268,6 +269,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = BCA8CBDE11E578A000812FB7 /* DebugRelease.xcconfig */;
 			buildSettings = {
+				EXCLUDED_ARCHS = arm64;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Release;
