@@ -358,7 +358,7 @@ void JSValue::dumpForBacktrace(PrintStream& out) const
         out.printf("%d", asInt32());
     else if (isDouble())
         out.printf("%lf", asDouble());
-    $()) {
+    else if (isCell()) {
         VM& vm = asCell()->vm();
         if (asCell()->inherits<JSString>(vm)) {
             JSString* string = asString(asCell());
