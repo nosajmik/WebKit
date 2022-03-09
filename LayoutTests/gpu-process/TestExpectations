@@ -1,0 +1,25 @@
+# webkit.org/b/222726
+fast/canvas/webgl/uniform-samplers-test.html [ Slow ]
+webgl/1.0.3/conformance/uniforms/uniform-samplers-test.html [ Slow ]
+webgl/2.0.0/conformance/uniforms/uniform-samplers-test.html [ Slow ]
+webgl/2.0.0/conformance/attribs/gl-vertexattribpointer.html [ Slow ]
+webgl/2.0.0/conformance2/rendering/blitframebuffer-filter-outofbounds.html [ Slow ]
+
+# webkit.org/b/222722
+webgl/1.0.3/conformance/state/gl-object-get-calls.html [ Timeout ]
+webgl/2.0.0/conformance/state/gl-object-get-calls.html [ Timeout ]
+webgl/2.0.0/conformance2/state/gl-object-get-calls.html [ Timeout ]
+
+# webkit.org/b/222410
+webgl/2.0.0/conformance/reading/read-pixels-test.html [ Failure ]
+webgl/2.0.0/conformance2/reading/read-pixels-pack-parameters.html [ Failure ]
+
+# webkit.org/b/222411
+webgl/many-contexts-access-after-loss.html [ Failure ]
+webgl/max-active-contexts-console-warning.html [ Failure ]
+webgl/max-active-contexts-gc.html [ Failure ]
+webgl/max-active-contexts-oldest-context-lost.html [ Failure ]
+webgl/max-active-contexts-webglcontextlost-prevent-default.html [ Timeout ]
+
+fast/canvas/webgl/lose-context-on-timeout-async.html [ Slow Pass ]
+fast/canvas/webgl/lose-context-on-timeout.html [ Slow Pass ]
