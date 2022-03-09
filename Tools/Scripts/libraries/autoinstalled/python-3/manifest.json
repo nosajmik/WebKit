@@ -1,0 +1,62 @@
+{
+    "setuptools": {
+        "index": "pypi.org",
+        "version": "56.2"
+    },
+    "setuptools_scm": {
+        "index": "pypi.org",
+        "version": "5.0.2"
+    },
+    "wheel": {
+        "index": "pypi.org",
+        "version": "0.35.1"
+    },
+    "six": {
+        "index": "pypi.org",
+        "version": "1.15"
+    },
+    "fasteners": {
+        "index": "pypi.org",
+        "version": "0.15"
+    },
+    "monotonic": {
+        "index": "pypi.org",
+        "version": "1.5"
+    },
+    "requests": {
+        "index": "pypi.org",
+        "version": "2.24"
+    },
+    "urllib3": {
+        "index": "pypi.org",
+        "version": "1.25.10"
+    },
+    "chardet": {
+        "index": "pypi.org",
+        "version": "3.0.4"
+    },
+    "certifi": {
+        "index": "pypi.org",
+        "version": "2020.6.20"
+    },
+    "idna": {
+        "index": "pypi.org",
+        "version": "2.10"
+    },
+    "socks": {
+        "index": "pypi.org",
+        "version": "1.7.1"
+    },
+    "xmltodict": {
+        "index": "pypi.org",
+        "version": "0.11"
+    },
+    "mock": {
+        "index": "pypi.org",
+        "version": "4.0.3"
+    },
+    "whichcraft": {
+        "index": "pypi.org",
+        "version": "0.6.1"
+    }
+}
