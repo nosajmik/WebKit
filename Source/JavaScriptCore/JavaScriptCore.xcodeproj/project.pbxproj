@@ -12807,6 +12807,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1C9051440BA9E8A70081E9D0 /* DebugRelease.xcconfig */;
 			buildSettings = {
+				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Debug;
 		};
@@ -12814,6 +12815,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1C9051440BA9E8A70081E9D0 /* DebugRelease.xcconfig */;
 			buildSettings = {
+				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 				STRIP_INSTALLED_PRODUCT = NO;
 			};
 			name = Release;
@@ -12822,6 +12824,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1C9051450BA9E8A70081E9D0 /* Base.xcconfig */;
 			buildSettings = {
+				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Production;
 		};
@@ -13187,6 +13190,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1C9051440BA9E8A70081E9D0 /* DebugRelease.xcconfig */;
 			buildSettings = {
+				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 				STRIP_INSTALLED_PRODUCT = NO;
 			};
 			name = Profiling;

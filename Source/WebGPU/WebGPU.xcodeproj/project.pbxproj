@@ -48,13 +48,11 @@
 		338BB2D227B6B63F00E066AB /* SourceSpan.h in Headers */ = {isa = PBXBuildFile; fileRef = 338BB2D127B6B63F00E066AB /* SourceSpan.h */; };
 		338BB2D427B6B66C00E066AB /* Lexer.h in Headers */ = {isa = PBXBuildFile; fileRef = 338BB2D327B6B66C00E066AB /* Lexer.h */; };
 		338BB2D627B6B68700E066AB /* Lexer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 338BB2D527B6B68700E066AB /* Lexer.cpp */; };
-		DD05A35C27BF09C60096EFAB /* libWTF.a in Product Dependencies */ = {isa = PBXBuildFile; fileRef = 1CEBD8292716CAE700A5254D /* libWTF.a */; };
 		33EA185E27BC194F00A1DD52 /* ASTNode.h in Headers */ = {isa = PBXBuildFile; fileRef = 33EA185D27BC194F00A1DD52 /* ASTNode.h */; };
 		33EA186027BC198100A1DD52 /* GlobalDirective.h in Headers */ = {isa = PBXBuildFile; fileRef = 33EA185F27BC198100A1DD52 /* GlobalDirective.h */; };
 		33EA186227BC19C100A1DD52 /* GlobalDecl.h in Headers */ = {isa = PBXBuildFile; fileRef = 33EA186127BC19C100A1DD52 /* GlobalDecl.h */; };
 		33EA186427BC1A1D00A1DD52 /* GlobalVariableDecl.h in Headers */ = {isa = PBXBuildFile; fileRef = 33EA186327BC1A1D00A1DD52 /* GlobalVariableDecl.h */; };
 		33EA186627BC1AD500A1DD52 /* CompilationMessage.h in Headers */ = {isa = PBXBuildFile; fileRef = 33EA186527BC1AD500A1DD52 /* CompilationMessage.h */; };
-		33EA186827BC1B1400A1DD52 /* CompilationMessage.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 33EA186727BC1B1400A1DD52 /* CompilationMessage.cpp */; };
 		33EA186A27BC1BE600A1DD52 /* Attribute.h in Headers */ = {isa = PBXBuildFile; fileRef = 33EA186927BC1BE600A1DD52 /* Attribute.h */; };
 		33EA186C27BC1CBC00A1DD52 /* Expression.h in Headers */ = {isa = PBXBuildFile; fileRef = 33EA186B27BC1CBC00A1DD52 /* Expression.h */; };
 		33EA186E27BC1D4C00A1DD52 /* TypeDecl.h in Headers */ = {isa = PBXBuildFile; fileRef = 33EA186D27BC1D4C00A1DD52 /* TypeDecl.h */; };
@@ -70,6 +68,7 @@
 		33EA188427BC268600A1DD52 /* StructureAccess.h in Headers */ = {isa = PBXBuildFile; fileRef = 33EA188327BC268600A1DD52 /* StructureAccess.h */; };
 		33EA188627BC26DF00A1DD52 /* TypeConversion.h in Headers */ = {isa = PBXBuildFile; fileRef = 33EA188527BC26DF00A1DD52 /* TypeConversion.h */; };
 		33EA188827BC361E00A1DD52 /* LiteralExpressions.h in Headers */ = {isa = PBXBuildFile; fileRef = 33EA188727BC361E00A1DD52 /* LiteralExpressions.h */; };
+		DD05A35C27BF09C60096EFAB /* libWTF.a in Product Dependencies */ = {isa = PBXBuildFile; fileRef = 1CEBD8292716CAE700A5254D /* libWTF.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -368,7 +367,6 @@
 				1CEBD8042716BFAB00A5254D /* config.h */,
 				33EA186527BC1AD500A1DD52 /* CompilationMessage.h */,
 				33EA186727BC1B1400A1DD52 /* CompilationMessage.cpp */,
-				338BB2D327B6B66C00E066AB /* Lexer.h */,
 				338BB2D527B6B68700E066AB /* Lexer.cpp */,
 				338BB2D327B6B66C00E066AB /* Lexer.h */,
 				338BB2D127B6B63F00E066AB /* SourceSpan.h */,
@@ -798,6 +796,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1CEBD7FB2716B5B400A5254D /* DebugRelease.xcconfig */;
 			buildSettings = {
+				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Debug;
 		};
@@ -805,6 +804,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1CEBD7FB2716B5B400A5254D /* DebugRelease.xcconfig */;
 			buildSettings = {
+				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Release;
 		};
@@ -840,6 +840,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1CEBD7FA2716B3D500A5254D /* Base.xcconfig */;
 			buildSettings = {
+				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Production;
 		};

@@ -13677,7 +13677,6 @@
 				5742A30825358A0400B7BA14 /* WebAuthnProcessCreationParameters.h in Headers */,
 				572EBBC22536A60A000552B3 /* WebAuthnProcessMessages.h in Headers */,
 				572EBBC92536AFD5000552B3 /* WebAuthnProcessProxy.h in Headers */,
-				572EBBD02536BB11000552B3 /* WebAuthnProcessProxyMessages.h in Headers */,
 				F42D634122A0EFDF00D2FB3A /* WebAutocorrectionData.h in Headers */,
 				990D39F5243BE64800199388 /* WebAutomationDOMWindowObserver.h in Headers */,
 				9955A6EC1C7980C200EB6A93 /* WebAutomationSession.h in Headers */,
@@ -16508,6 +16507,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1A4F976B100E7B6600637A18 /* DebugRelease.xcconfig */;
 			buildSettings = {
+				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Debug;
 		};
@@ -16515,6 +16515,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1A4F976B100E7B6600637A18 /* DebugRelease.xcconfig */;
 			buildSettings = {
+				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Release;
 		};
@@ -16711,6 +16712,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 1A4F976A100E7B6600637A18 /* Base.xcconfig */;
 			buildSettings = {
+				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Production;
 		};
