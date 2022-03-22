@@ -4170,8 +4170,8 @@ void JSDollarVM::finishCreation(VM& vm)
     addFunction(vm, "geteuid", functionGeteuid, 0);
 
     // Instrumenting internal functions for interfacing with wasm/rust
-    addFunction(vm, "touchVictimTypeInternal", 1);
-    addFunction(vm, "timeVictimTypeInternal", 1);
+    addFunction(vm, "touchVictimTypeInternal", functionTouchVictimTypeInternal, 1);
+    addFunction(vm, "timeVictimTypeInternal", functionTimeVictimTypeInternal, 1);
 
     addFunction(vm, "llintTrue", functionLLintTrue, 0);
     addFunction(vm, "baselineJITTrue", functionBaselineJITTrue, 0);
