@@ -69,7 +69,7 @@ protected:
     virtual void recordSetInlineFillColor(SRGBA<uint8_t>) = 0;
     virtual void recordSetInlineStrokeColor(SRGBA<uint8_t>) = 0;
     virtual void recordSetStrokeThickness(float) = 0;
-    virtual void recordSetState(const GraphicsContextState&, GraphicsContextState::StateChangeFlags) = 0;
+    virtual void recordSetState(const GraphicsContextState&) = 0;
     virtual void recordSetLineCap(LineCap) = 0;
     virtual void recordSetLineDash(const DashArray&, float dashOffset) = 0;
     virtual void recordSetLineJoin(LineJoin) = 0;
@@ -84,6 +84,7 @@ protected:
     virtual void recordDrawGlyphs(const Font&, const GlyphBufferGlyph*, const GlyphBufferAdvance*, unsigned count, const FloatPoint& localAnchor, FontSmoothingMode) = 0;
     virtual void recordDrawImageBuffer(ImageBuffer&, const FloatRect& destRect, const FloatRect& srcRect, const ImagePaintingOptions&) = 0;
     virtual void recordDrawNativeImage(RenderingResourceIdentifier imageIdentifier, const FloatSize& imageSize, const FloatRect& destRect, const FloatRect& srcRect, const ImagePaintingOptions&) = 0;
+    virtual void recordDrawSystemImage(SystemImage&, const FloatRect&) = 0;
     virtual void recordDrawPattern(RenderingResourceIdentifier, const FloatRect& destRect, const FloatRect& tileRect, const AffineTransform&, const FloatPoint& phase, const FloatSize& spacing, const ImagePaintingOptions& = { }) = 0;
     virtual void recordBeginTransparencyLayer(float) = 0;
     virtual void recordEndTransparencyLayer() = 0;
@@ -134,30 +135,25 @@ protected:
     virtual bool recordResourceUse(Font&) = 0;
 
     struct ContextState {
+        GraphicsContextState state;
+        std::optional<GraphicsContextState> lastDrawingState;
         AffineTransform ctm;
         FloatRect clipBounds;
-        GraphicsContextStateChange stateChange;
-        GraphicsContextState lastDrawingState;
 
-        ContextState(const GraphicsContextState& state, const AffineTransform& transform, const FloatRect& clip)
-            : ctm(transform)
-            , clipBounds(clip)
-            , lastDrawingState(state)
+        ContextState(const GraphicsContextState& state, const AffineTransform& ctm, const FloatRect& clipBounds)
+            : state(state)
+            , ctm(ctm)
+            , clipBounds(clipBounds)
         {
-        }
-
-        ContextState cloneForSave() const
-        {
-            ContextState state(lastDrawingState, ctm, clipBounds);
-            state.stateChange = stateChange;
-            return state;
         }
 
         ContextState cloneForTransparencyLayer() const
         {
-            auto state = cloneForSave();
-            state.lastDrawingState.alpha = 1;
-            return state;
+            auto copy = *this;
+            copy.state.didBeginTransparencyLayer();
+            if (copy.lastDrawingState)
+                copy.lastDrawingState->didBeginTransparencyLayer();
+            return copy;
         }
 
         void translate(float x, float y);
@@ -172,7 +168,7 @@ protected:
     const ContextState& currentState() const;
     ContextState& currentState();
 
-    WEBCORE_EXPORT RefPtr<ImageBuffer> createImageBuffer(const FloatSize&, const DestinationColorSpace&, RenderingMode, RenderingMethod) const override;
+    WEBCORE_EXPORT RefPtr<ImageBuffer> createImageBuffer(const FloatSize&, float resolutionScale, const DestinationColorSpace&, std::optional<RenderingMode>, std::optional<RenderingMethod>) const override;
 
 private:
     bool hasPlatformContext() const final { return false; }
@@ -188,7 +184,7 @@ private:
 
     WEBCORE_EXPORT const GraphicsContextState& state() const final;
 
-    WEBCORE_EXPORT void didUpdateState(const GraphicsContextState&, GraphicsContextState::StateChangeFlags) final;
+    WEBCORE_EXPORT void didUpdateState(GraphicsContextState&) final;
 
     WEBCORE_EXPORT void setLineCap(LineCap) final;
     WEBCORE_EXPORT void setLineDash(const DashArray&, float dashOffset) final;
@@ -220,6 +216,7 @@ private:
 
     WEBCORE_EXPORT void drawImageBuffer(ImageBuffer&, const FloatRect& destination, const FloatRect& source, const ImagePaintingOptions&) final;
     WEBCORE_EXPORT void drawNativeImage(NativeImage&, const FloatSize& imageSize, const FloatRect& destRect, const FloatRect& srcRect, const ImagePaintingOptions&) final;
+    WEBCORE_EXPORT void drawSystemImage(SystemImage&, const FloatRect&) final;
     WEBCORE_EXPORT void drawPattern(NativeImage&, const FloatRect& destRect, const FloatRect& tileRect, const AffineTransform&, const FloatPoint& phase, const FloatSize& spacing, const ImagePaintingOptions&) final;
     WEBCORE_EXPORT void drawPattern(ImageBuffer&, const FloatRect& destRect, const FloatRect& tileRect, const AffineTransform&, const FloatPoint& phase, const FloatSize& spacing, const ImagePaintingOptions&) final;
 
@@ -268,7 +265,7 @@ private:
     WEBCORE_EXPORT FloatRect roundToDevicePixels(const FloatRect&, GraphicsContext::RoundingMode) final;
 
     void appendStateChangeItemIfNecessary();
-    void appendStateChangeItem(const GraphicsContextStateChange&, GraphicsContextState::StateChangeFlags);
+    void appendStateChangeItem(const GraphicsContextState&);
 
     const AffineTransform& ctm() const;
 

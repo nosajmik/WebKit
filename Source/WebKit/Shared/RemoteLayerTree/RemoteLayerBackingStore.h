@@ -45,6 +45,7 @@ namespace WebKit {
 
 class PlatformCALayerRemote;
 class RemoteLayerBackingStoreCollection;
+enum class SwapBuffersDisplayRequirement : uint8_t;
 
 class RemoteLayerBackingStore {
     WTF_MAKE_NONCOPYABLE(RemoteLayerBackingStore);
@@ -65,8 +66,15 @@ public:
     void setNeedsDisplay();
 
     void setContents(WTF::MachSendRight&& surfaceHandle);
-    // Returns true if the backing store changed.
-    bool display();
+
+    SwapBuffersDisplayRequirement prepareBuffers(bool hasEmptyDirtyRegion);
+
+    // Returns true if we need encode the buffer.
+    bool layerWillBeDisplayed();
+    bool needsDisplay() const;
+
+    void prepareToDisplay();
+    void paintContents();
 
     WebCore::FloatSize size() const { return m_size; }
     float scale() const { return m_scale; }
@@ -91,8 +99,8 @@ public:
     }
 
     // Just for RemoteBackingStoreCollection.
-    void applySwappedBuffers(RefPtr<WebCore::ImageBuffer>&& front, RefPtr<WebCore::ImageBuffer>&& back, RefPtr<WebCore::ImageBuffer>&& secondaryBack, bool frontBufferNeedsDisplay);
-    void swapToValidFrontBuffer();
+    void applySwappedBuffers(RefPtr<WebCore::ImageBuffer>&& front, RefPtr<WebCore::ImageBuffer>&& back, RefPtr<WebCore::ImageBuffer>&& secondaryBack);
+    WebCore::SetNonVolatileResult swapToValidFrontBuffer();
 
     Vector<std::unique_ptr<WebCore::ThreadSafeImageBufferFlusher>> takePendingFlushers();
 
@@ -102,13 +110,14 @@ public:
         SecondaryBack
     };
 
-    void willMakeBufferVolatile(BufferType);
-    void didMakeFrontBufferNonVolatile(WebCore::VolatilityState);
-
     RefPtr<WebCore::ImageBuffer> bufferForType(BufferType) const;
 
     // Returns true if it was able to fulfill the request. This can fail when trying to mark an in-use surface as volatile.
-    bool setBufferVolatility(BufferType, bool isVolatile);
+    bool setBufferVolatile(BufferType);
+    WebCore::SetNonVolatileResult setFrontBufferNonVolatile();
+
+    bool hasEmptyDirtyRegion() const { return m_dirtyRegion.isEmpty() || m_size.isEmpty(); }
+    bool supportsPartialRepaint() const;
 
     MonotonicTime lastDisplayTime() const { return m_lastDisplayTime; }
 
@@ -124,10 +133,6 @@ private:
 #if ENABLE(CG_DISPLAY_LIST_BACKED_IMAGE_BUFFER)
         RefPtr<WebCore::ImageBuffer> displayListImageBuffer;
 #endif
-        // FIXME: This flag needs to be part of ImageBuffer[Backend]. Currently it's not correctly maintained
-        // in the GPU Process code path.
-        bool isVolatile = false;
-
         explicit operator bool() const
         {
             return !!imageBuffer;
@@ -137,11 +142,7 @@ private:
     };
 
     bool setBufferVolatile(Buffer&);
-    WebCore::VolatilityState setBufferNonVolatile(Buffer&);
-
-    void swapBuffers();
-
-    bool supportsPartialRepaint() const;
+    WebCore::SetNonVolatileResult setBufferNonVolatile(Buffer&);
 
     PlatformCALayerRemote* m_layer;
 

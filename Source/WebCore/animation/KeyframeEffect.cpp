@@ -770,6 +770,8 @@ ExceptionOr<void> KeyframeEffect::processKeyframes(JSGlobalObject& lexicalGlobal
     // since they can be computed up-front.
     computeMissingKeyframeOffsets(parsedKeyframes);
 
+    m_inheritedProperties.clear();
+
     // 8. For each frame in processed keyframes, perform the following steps:
     for (auto& keyframe : parsedKeyframes) {
         // Let the timing function of frame be the result of parsing the “easing” property on frame using the CSS syntax
@@ -779,6 +781,11 @@ ExceptionOr<void> KeyframeEffect::processKeyframes(JSGlobalObject& lexicalGlobal
         if (timingFunctionResult.hasException())
             return timingFunctionResult.releaseException();
         keyframe.timingFunction = timingFunctionResult.returnValue();
+
+        for (auto& [property, value] : keyframe.styleStrings) {
+            if (equalLettersIgnoringASCIICase(value, "inherit"))
+                m_inheritedProperties.add(property);
+        }
     }
 
     // 9. Parse each of the values in unused easings using the CSS syntax defined for easing property of the
@@ -913,20 +920,16 @@ void KeyframeEffect::setBlendingKeyframes(KeyframeList& blendingKeyframes)
 
 void KeyframeEffect::checkForMatchingTransformFunctionLists()
 {
-    m_transformFunctionListsMatch = false;
-
-    if (m_blendingKeyframes.size() < 2 || !m_blendingKeyframes.containsProperty(CSSPropertyTransform))
+    if (m_blendingKeyframes.size() < 2 || !m_blendingKeyframes.containsProperty(CSSPropertyTransform)) {
+        m_transformFunctionListsMatchPrefix = 0;
         return;
-
-    Vector<TransformOperation::OperationType> sharedPrimitives;
-    sharedPrimitives.reserveInitialCapacity(m_blendingKeyframes[0].style()->transform().operations().size());
-
-    for (const auto& keyframe : m_blendingKeyframes) {
-        if (!keyframe.style()->transform().updateSharedPrimitives(sharedPrimitives))
-            return;
     }
 
-    m_transformFunctionListsMatch = true;
+    SharedPrimitivesPrefix prefix;
+    for (const auto& keyframe : m_blendingKeyframes)
+        prefix.update(keyframe.style()->transform());
+
+    m_transformFunctionListsMatchPrefix = prefix.primitives().size();
 }
 
 bool KeyframeEffect::checkForMatchingFilterFunctionLists(CSSPropertyID propertyID, const std::function<const FilterOperations& (const RenderStyle&)>& filtersGetter) const
@@ -1183,7 +1186,7 @@ ExceptionOr<void> KeyframeEffect::setPseudoElement(const String& pseudoElement)
         if (!isLegacy && !pseudoElement.startsWith("::"))
             return Exception { SyntaxError };
         auto pseudoType = CSSSelector::parsePseudoElementType(pseudoElement.substring(isLegacy ? 1 : 2));
-        if (pseudoType == CSSSelector::PseudoElementUnknown)
+        if (pseudoType == CSSSelector::PseudoElementUnknown || pseudoType == CSSSelector::PseudoElementWebKitCustom)
             return Exception { SyntaxError };
         pseudoId = CSSSelector::pseudoId(pseudoType);
     }
@@ -1686,7 +1689,7 @@ void KeyframeEffect::transformRelatedPropertyDidChange()
     addPendingAcceleratedAction(AcceleratedAction::TransformChange);
 }
 
-void KeyframeEffect::propertyAffectingLogicalPropertiesDidChange(RenderStyle& unanimatedStyle, const Style::ResolutionContext& resolutionContext)
+void KeyframeEffect::propertyAffectingKeyframeResolutionDidChange(RenderStyle& unanimatedStyle, const Style::ResolutionContext& resolutionContext)
 {
     switch (m_blendingKeyframesSource) {
     case BlendingKeyframesSource::CSSTransition:
@@ -1941,7 +1944,7 @@ bool KeyframeEffect::computeExtentOfTransformAnimation(LayoutRect& bounds) const
         auto keyframeBounds = bounds;
 
         bool canCompute;
-        if (transformFunctionListsMatch())
+        if (transformFunctionListPrefix() > 0)
             canCompute = computeTransformedExtentViaTransformList(rendererBox, *style, keyframeBounds);
         else
             canCompute = computeTransformedExtentViaMatrix(rendererBox, *style, keyframeBounds);
@@ -2127,6 +2130,15 @@ Seconds KeyframeEffect::timeToNextTick(BasicEffectTiming timing) const
     }
 
     return AnimationEffect::timeToNextTick(timing);
+}
+
+void KeyframeEffect::setComposite(CompositeOperation compositeOperation)
+{
+    if (m_compositeOperation == compositeOperation)
+        return;
+
+    m_compositeOperation = compositeOperation;
+    invalidate();
 }
 
 CompositeOperation KeyframeEffect::bindingsComposite() const

@@ -148,24 +148,19 @@ static TextStream& operator<<(TextStream& ts, const SetStrokeThickness& state)
     return ts;
 }
 
-SetState::SetState(const GraphicsContextState& state, GraphicsContextState::StateChangeFlags flags)
-    : m_stateChange(state, flags)
-{
-}
-
-SetState::SetState(const GraphicsContextStateChange& stateChange)
-    : m_stateChange(stateChange)
+SetState::SetState(const GraphicsContextState& state)
+    : m_state(state)
 {
 }
 
 void SetState::apply(GraphicsContext& context)
 {
-    m_stateChange.apply(context);
+    context.updateState(m_state);
 }
 
-static TextStream& operator<<(TextStream& ts, const SetState& state)
+static TextStream& operator<<(TextStream& ts, const SetState& item)
 {
-    ts << state.stateChange();
+    ts << item.state();
     return ts;
 }
 
@@ -395,6 +390,18 @@ static TextStream& operator<<(TextStream& ts, const DrawNativeImage& item)
     ts.dumpProperty("image-identifier", item.imageIdentifier());
     ts.dumpProperty("source-rect", item.source());
     ts.dumpProperty("dest-rect", item.destinationRect());
+    return ts;
+}
+
+void DrawSystemImage::apply(GraphicsContext& context) const
+{
+    context.drawSystemImage(m_systemImage, m_destinationRect);
+}
+
+static TextStream& operator<<(TextStream& ts, const DrawSystemImage& item)
+{
+    // FIXME: dump more stuff.
+    ts.dumpProperty("destination", item.destinationRect());
     return ts;
 }
 
@@ -1021,6 +1028,7 @@ static TextStream& operator<<(TextStream& ts, ItemType type)
     case ItemType::DrawGlyphs: ts << "draw-glyphs"; break;
     case ItemType::DrawImageBuffer: ts << "draw-image-buffer"; break;
     case ItemType::DrawNativeImage: ts << "draw-native-image"; break;
+    case ItemType::DrawSystemImage: ts << "draw-system-image"; break;
     case ItemType::DrawPattern: ts << "draw-pattern"; break;
     case ItemType::DrawRect: ts << "draw-rect"; break;
     case ItemType::DrawLine: ts << "draw-line"; break;
@@ -1140,6 +1148,9 @@ TextStream& operator<<(TextStream& ts, ItemHandle item)
         break;
     case ItemType::DrawNativeImage:
         ts << item.get<DrawNativeImage>();
+        break;
+    case ItemType::DrawSystemImage:
+        ts << item.get<DrawSystemImage>();
         break;
     case ItemType::DrawPattern:
         ts << item.get<DrawPattern>();

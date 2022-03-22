@@ -43,7 +43,6 @@
 #include "PrivateClickMeasurementManagerProxy.h"
 #include "RemoteWorkerType.h"
 #include "ServiceWorkerFetchTask.h"
-#include "WebIDBServer.h"
 #include "WebPageProxy.h"
 #include "WebPageProxyMessages.h"
 #include "WebProcessProxy.h"
@@ -111,6 +110,18 @@ static UniqueRef<PCM::ManagerInterface> managerOrProxy(NetworkSession& networkSe
     return makeUniqueRef<PrivateClickMeasurementManager>(makeUniqueRef<PCM::ClientImpl>(networkSession, networkProcess), pcmStoreDirectory(networkSession, parameters.resourceLoadStatisticsParameters.directory, parameters.resourceLoadStatisticsParameters.privateClickMeasurementStorageDirectory));
 }
 
+static Ref<NetworkStorageManager> createNetworkStorageManager(IPC::Connection* connection, const NetworkSessionCreationParameters& parameters)
+{
+    SandboxExtension::consumePermanently(parameters.localStorageDirectoryExtensionHandle);
+    SandboxExtension::consumePermanently(parameters.indexedDBDirectoryExtensionHandle);
+    SandboxExtension::consumePermanently(parameters.cacheStorageDirectoryExtensionHandle);
+    SandboxExtension::consumePermanently(parameters.generalStorageDirectoryHandle);
+    IPC::Connection::UniqueID connectionID;
+    if (connection)
+        connectionID = connection->uniqueID();
+    return NetworkStorageManager::create(parameters.sessionID, connectionID, parameters.generalStorageDirectory, parameters.localStorageDirectory, parameters.indexedDBDirectory, parameters.cacheStorageDirectory, parameters.perOriginStorageQuota, parameters.perThirdPartyOriginStorageQuota, parameters.shouldUseCustomStoragePaths);
+}
+
 NetworkSession::NetworkSession(NetworkProcess& networkProcess, const NetworkSessionCreationParameters& parameters)
     : m_sessionID(parameters.sessionID)
     , m_networkProcess(networkProcess)
@@ -127,10 +138,11 @@ NetworkSession::NetworkSession(NetworkProcess& networkProcess, const NetworkSess
 #endif
     , m_privateClickMeasurement(managerOrProxy(*this, networkProcess, parameters))
     , m_privateClickMeasurementDebugModeEnabled(parameters.enablePrivateClickMeasurementDebugMode)
-    , m_broadcastChannelRegistry(makeUniqueRef<NetworkBroadcastChannelRegistry>())
+    , m_broadcastChannelRegistry(makeUniqueRef<NetworkBroadcastChannelRegistry>(networkProcess))
     , m_testSpeedMultiplier(parameters.testSpeedMultiplier)
     , m_allowsServerPreconnect(parameters.allowsServerPreconnect)
     , m_shouldRunServiceWorkersOnMainThreadForTesting(parameters.shouldRunServiceWorkersOnMainThreadForTesting)
+    , m_storageManager(createNetworkStorageManager(networkProcess.parentProcessConnection(), parameters))
 #if ENABLE(BUILT_IN_NOTIFICATIONS)
     , m_notificationManager(*this, parameters.webPushMachServiceName)
 #endif
@@ -167,6 +179,14 @@ NetworkSession::NetworkSession(NetworkProcess& networkProcess, const NetworkSess
 
 #if ENABLE(INTELLIGENT_TRACKING_PREVENTION)
     setResourceLoadStatisticsEnabled(parameters.resourceLoadStatisticsParameters.enabled);
+#endif
+
+#if ENABLE(SERVICE_WORKER)
+    SandboxExtension::consumePermanently(parameters.serviceWorkerRegistrationDirectoryExtensionHandle);
+    m_serviceWorkerInfo = ServiceWorkerInfo {
+        parameters.serviceWorkerRegistrationDirectory,
+        parameters.serviceWorkerProcessTerminationDelayEnabled
+    };
 #endif
 
 #if ENABLE(BUILT_IN_NOTIFICATIONS)
@@ -206,8 +226,7 @@ void NetworkSession::invalidateAndCancel()
     if (m_resourceLoadStatistics)
         m_resourceLoadStatistics->invalidateAndCancel();
 #endif
-    if (auto manager = std::exchange(m_storageManager, nullptr))
-        manager->close();
+    m_storageManager->close();
     m_cacheEngine = nullptr;
 #if ASSERT_ENABLED
     m_isInvalidated = true;
@@ -241,7 +260,7 @@ void NetworkSession::setResourceLoadStatisticsEnabled(bool enable)
         m_resourceLoadStatistics->setResourceLoadStatisticsDebugMode(true, [] { });
     // This should always be forwarded since debug mode may be enabled at runtime.
     if (!m_resourceLoadStatisticsManualPrevalentResource.isEmpty())
-        m_resourceLoadStatistics->setPrevalentResourceForDebugMode(m_resourceLoadStatisticsManualPrevalentResource, [] { });
+        m_resourceLoadStatistics->setPrevalentResourceForDebugMode(RegistrableDomain { m_resourceLoadStatisticsManualPrevalentResource }, [] { });
     forwardResourceLoadStatisticsSettings();
 }
 
@@ -268,7 +287,7 @@ void NetworkSession::logDiagnosticMessageWithValue(const String& message, const 
     m_networkProcess->parentProcessConnection()->send(Messages::WebPageProxy::LogDiagnosticMessageWithValueFromWebProcess(message, description, value, significantFigures, shouldSample), 0);
 }
 
-void NetworkSession::deleteAndRestrictWebsiteDataForRegistrableDomains(OptionSet<WebsiteDataType> dataTypes, RegistrableDomainsToDeleteOrRestrictWebsiteDataFor&& domains, bool shouldNotifyPage, CompletionHandler<void(const HashSet<RegistrableDomain>&)>&& completionHandler)
+void NetworkSession::deleteAndRestrictWebsiteDataForRegistrableDomains(OptionSet<WebsiteDataType> dataTypes, RegistrableDomainsToDeleteOrRestrictWebsiteDataFor&& domains, bool shouldNotifyPage, CompletionHandler<void(HashSet<RegistrableDomain>&&)>&& completionHandler)
 {
     if (auto* storageSession = networkStorageSession()) {
         for (auto& domain : domains.domainsToEnforceSameSiteStrictFor)
@@ -533,7 +552,7 @@ void NetworkSession::removeLoaderWaitingWebProcessTransfer(NetworkResourceLoadId
         cachedResourceLoader->takeLoader()->abort();
 }
 
-std::unique_ptr<WebSocketTask> NetworkSession::createWebSocketTask(WebPageProxyIdentifier, NetworkSocketChannel&, const WebCore::ResourceRequest&, const String& protocol, const WebCore::ClientOrigin&)
+std::unique_ptr<WebSocketTask> NetworkSession::createWebSocketTask(WebPageProxyIdentifier, NetworkSocketChannel&, const WebCore::ResourceRequest&, const String& protocol, const WebCore::ClientOrigin&, bool)
 {
     return nullptr;
 }
@@ -568,8 +587,7 @@ void NetworkSession::lowMemoryHandler(Critical)
     if (m_swServer)
         m_swServer->handleLowMemoryWarning();
 #endif
-    if (m_storageManager)
-        m_storageManager->handleLowMemoryWarning();
+    m_storageManager->handleLowMemoryWarning();
 }
 
 #if ENABLE(SERVICE_WORKER)
@@ -635,17 +653,6 @@ SWServer& NetworkSession::ensureSWServer()
     return *m_swServer;
 }
 
-void NetworkSession::addServiceWorkerSession(bool processTerminationDelayEnabled, String&& serviceWorkerRegistrationDirectory, const SandboxExtension::Handle& handle)
-{
-    bool hadServiceWorkerInfo = !!m_serviceWorkerInfo;
-    m_serviceWorkerInfo = ServiceWorkerInfo {
-        WTFMove(serviceWorkerRegistrationDirectory),
-        processTerminationDelayEnabled
-    };
-    if (!hadServiceWorkerInfo)
-        SandboxExtension::consumePermanently(handle);
-}
-
 bool NetworkSession::hasServiceWorkerDatabasePath() const
 {
     return m_serviceWorkerInfo && !m_serviceWorkerInfo->databasePath.isEmpty();
@@ -658,20 +665,6 @@ WebSharedWorkerServer& NetworkSession::ensureSharedWorkerServer()
     if (!m_sharedWorkerServer)
         m_sharedWorkerServer = makeUnique<WebSharedWorkerServer>(*this);
     return *m_sharedWorkerServer;
-}
-
-void NetworkSession::addStorageManagerSession(const String& generalStoragePath, SandboxExtension::Handle& generalStoragePathHandle, const String& localStoragePath, SandboxExtension::Handle& localStoragePathHandle, const String& idbStoragePath, SandboxExtension::Handle& idbStoragePathHandle, const String& cacheStoragePath, uint64_t defaultOriginQuota, uint64_t defaultThirdPartyQuota, bool shouldUseCustomStoragePaths)
-{
-    if (m_storageManager)
-        return;
-
-    SandboxExtension::consumePermanently(generalStoragePathHandle);
-    SandboxExtension::consumePermanently(localStoragePathHandle);
-    SandboxExtension::consumePermanently(idbStoragePathHandle);
-    IPC::Connection::UniqueID connectionID;
-    if (auto* connection = networkProcess().parentProcessConnection())
-        connectionID = connection->uniqueID();
-    m_storageManager = NetworkStorageManager::create(sessionID(), connectionID, generalStoragePath, localStoragePath, idbStoragePath, cacheStoragePath, defaultOriginQuota, defaultThirdPartyQuota, shouldUseCustomStoragePaths);
 }
 
 void NetworkSession::ensureCacheEngine(Function<void(CacheStorage::Engine&)>&& callback)

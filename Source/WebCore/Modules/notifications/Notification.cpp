@@ -43,6 +43,7 @@
 #include "NotificationEvent.h"
 #include "NotificationPermissionCallback.h"
 #include "ServiceWorkerGlobalScope.h"
+#include "UserGestureIndicator.h"
 #include "WindowEventLoop.h"
 #include "WindowFocusAllowedIndicator.h"
 #include <wtf/CompletionHandler.h>
@@ -52,21 +53,21 @@ namespace WebCore {
 
 WTF_MAKE_ISO_ALLOCATED_IMPL(Notification);
 
-Ref<Notification> Notification::create(ScriptExecutionContext& context, const String& title, const Options& options)
+Ref<Notification> Notification::create(ScriptExecutionContext& context, String&& title, Options&& options)
 {
-    auto notification = adoptRef(*new Notification(context, title, options));
+    auto notification = adoptRef(*new Notification(context, WTFMove(title), WTFMove(options)));
     notification->suspendIfNeeded();
     notification->showSoon();
     return notification;
 }
 
-Notification::Notification(ScriptExecutionContext& context, const String& title, const Options& options)
+Notification::Notification(ScriptExecutionContext& context, String&& title, Options&& options)
     : ActiveDOMObject(&context)
-    , m_title(title.isolatedCopy())
+    , m_title(WTFMove(title).isolatedCopy())
     , m_direction(options.dir)
-    , m_lang(options.lang.isolatedCopy())
-    , m_body(options.body.isolatedCopy())
-    , m_tag(options.tag.isolatedCopy())
+    , m_lang(WTFMove(options.lang).isolatedCopy())
+    , m_body(WTFMove(options.body).isolatedCopy())
+    , m_tag(WTFMove(options.tag).isolatedCopy())
     , m_state(Idle)
     , m_contextIdentifier(context.identifier())
 {
@@ -293,6 +294,11 @@ void Notification::requestPermission(Document& document, RefPtr<NotificationPerm
 
     if (!document.isSecureContext()) {
         document.addConsoleMessage(MessageSource::Security, MessageLevel::Error, "The Notification permission may only be requested in a secure context."_s);
+        return resolvePromiseAndCallback(Permission::Denied);
+    }
+
+    if (!UserGestureIndicator::processingUserGesture()) {
+        document.addConsoleMessage(MessageSource::Security, MessageLevel::Error, "Notification prompting can only be done from a user gesture."_s);
         return resolvePromiseAndCallback(Permission::Denied);
     }
 

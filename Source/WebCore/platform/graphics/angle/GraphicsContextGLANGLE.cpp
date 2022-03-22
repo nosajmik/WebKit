@@ -31,13 +31,13 @@
 
 #include "ANGLEHeaders.h"
 #include "ANGLEUtilities.h"
-#include "GraphicsContextGLOpenGLManager.h"
 #include "ImageBuffer.h"
 #include "IntRect.h"
 #include "IntSize.h"
 #include "Logging.h"
 #include "NotImplemented.h"
 #include "PixelBuffer.h"
+#include "RuntimeApplicationChecks.h"
 #include <algorithm>
 #include <cstring>
 #include <wtf/Seconds.h>
@@ -57,6 +57,15 @@ namespace WebCore {
 static const char* packedDepthStencilExtensionName = "GL_OES_packed_depth_stencil";
 
 static Seconds maxFrameDuration = 5_s;
+
+// List of displays ever instantiated from EGL. When terminating all EGL resources, we need to
+// terminate all displays. However, we cannot ask EGL all the displays it has created.
+// We must know all the displays via this set.
+static HashSet<GCGLDisplay>& usedDisplays()
+{
+    static NeverDestroyed<HashSet<GCGLDisplay>> s_usedDisplays;
+    return s_usedDisplays;
+}
 
 #if PLATFORM(MAC) || PLATFORM(IOS_FAMILY)
 static void wipeAlphaChannelFromPixels(int width, int height, unsigned char* pixels)
@@ -90,6 +99,14 @@ bool GraphicsContextGLANGLE::platformInitializeContext()
 
 bool GraphicsContextGLANGLE::platformInitialize()
 {
+    // EGL resources are only ever released if we run in process mode where EGL is used on host app threads, e.g. WK1
+    // mode.
+    static bool tracksUsedDisplays = !(isInWebProcess() || isInGPUProcess());
+    if (tracksUsedDisplays) {
+        // TODO: Move to ~GraphicsContextGLANGLE() when the function is moved to this file.
+        ASSERT(m_displayObj);
+        usedDisplays().add(m_displayObj);
+    }
     return true;
 }
 
@@ -163,17 +180,9 @@ bool GraphicsContextGLANGLE::releaseThreadResources(ReleaseThreadResourceBehavio
             ASSERT_NOT_REACHED(); // All resources must have been destroyed.
             EGL_MakeCurrent(currentDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         }
-        const EGLNativeDisplayType nativeDisplays[] = {
-            reinterpret_cast<EGLNativeDisplayType>(defaultDisplay),
-#if PLATFORM(COCOA)
-            reinterpret_cast<EGLNativeDisplayType>(defaultOpenGLDisplay),
-#endif
-        };
-        for (auto nativeDisplay : nativeDisplays) {
-            EGLDisplay display = EGL_GetDisplay(nativeDisplay);
-            if (display != EGL_NO_DISPLAY)
-                EGL_Terminate(display);
-        }
+        for (auto display : usedDisplays())
+            EGL_Terminate(display);
+        usedDisplays().clear();
     }
     // Called when we do not know if we will ever see another call from this thread again.
     // Unset the EGL current context by releasing whole EGL thread state.
@@ -551,19 +560,7 @@ void GraphicsContextGLANGLE::prepareTextureImpl()
     if (contextAttributes().antialias)
         resolveMultisamplingIfNecessary();
 
-#if USE(COORDINATED_GRAPHICS)
-    std::swap(m_texture, m_compositorTexture);
-    std::swap(m_texture, m_intermediateTexture);
-    std::swap(m_textureBacking, m_compositorTextureBacking);
-    std::swap(m_textureBacking, m_intermediateTextureBacking);
-
-    GL_BindFramebuffer(GL_FRAMEBUFFER, m_fbo);
-    GL_FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, drawingBufferTextureTarget(), m_texture, 0);
-    GL_Flush();
-
-    if (m_state.boundDrawFBO != m_fbo)
-        GL_BindFramebuffer(GraphicsContextGL::FRAMEBUFFER, m_state.boundDrawFBO);
-#else
+#if PLATFORM(COCOA)
     if (m_preserveDrawingBufferTexture) {
         // Blit m_preserveDrawingBufferTexture into m_texture.
         ScopedGLCapability scopedScissor(GL_SCISSOR_TEST, GL_FALSE);
@@ -2181,24 +2178,6 @@ void GraphicsContextGLANGLE::synthesizeGLError(GCGLenum error)
     m_syntheticErrors.add(error);
 }
 
-void GraphicsContextGLANGLE::forceContextLost()
-{
-    for (auto* client : copyToVector(m_clients))
-        client->forceContextLost();
-}
-
-void GraphicsContextGLANGLE::recycleContext()
-{
-    for (auto* client : copyToVector(m_clients))
-        client->recycleContext();
-}
-
-void GraphicsContextGLANGLE::dispatchContextChangedNotification()
-{
-    for (auto* client : copyToVector(m_clients))
-        client->dispatchContextChangedNotification();
-}
-
 void GraphicsContextGLANGLE::drawArraysInstanced(GCGLenum mode, GCGLint first, GCGLsizei count, GCGLsizei primcount)
 {
     if (!makeContextCurrent())
@@ -2928,11 +2907,6 @@ void GraphicsContextGLANGLE::ensureExtensionEnabled(const String& name)
 bool GraphicsContextGLANGLE::isExtensionEnabled(const String& name)
 {
     return m_availableExtensions.contains(name) || m_enabledExtensions.contains(name);
-}
-
-GLint GraphicsContextGLANGLE::getGraphicsResetStatusARB()
-{
-    return GraphicsContextGL::NO_ERROR;
 }
 
 String GraphicsContextGLANGLE::getTranslatedShaderSourceANGLE(PlatformGLObject shader)

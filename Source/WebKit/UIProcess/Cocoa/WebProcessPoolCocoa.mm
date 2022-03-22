@@ -130,7 +130,6 @@ NSString *WebKitJSCFTLJITEnabledDefaultsKey = @"WebKitJSCFTLJITEnabledDefaultsKe
 static NSString *WebKitApplicationDidChangeAccessibilityEnhancedUserInterfaceNotification = @"NSApplicationDidChangeAccessibilityEnhancedUserInterfaceNotification";
 static CFStringRef AppleColorPreferencesChangedNotification = CFSTR("AppleColorPreferencesChangedNotification");
 #endif
-static const char* const WebKitCaptivePortalModeChangedNotification_Legacy = "WebKitCaptivePortalModeEnabled";
 
 static NSString * const WebKitSuppressMemoryPressureHandlerDefaultsKey = @"WebKitSuppressMemoryPressureHandler";
 
@@ -229,7 +228,7 @@ void WebProcessPool::setMediaAccessibilityPreferences(WebProcessProxy& process)
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), [weakProcess = WeakPtr { process }] {
         auto captionDisplayMode = WebCore::CaptionUserPreferencesMediaAF::platformCaptionDisplayMode();
         auto preferredLanguages = WebCore::CaptionUserPreferencesMediaAF::platformPreferredLanguages();
-        callOnMainRunLoop([weakProcess, captionDisplayMode, preferredLanguages = WTFMove(preferredLanguages).isolatedCopy()] {
+        callOnMainRunLoop([weakProcess, captionDisplayMode, preferredLanguages = crossThreadCopy(WTFMove(preferredLanguages))] {
             if (weakProcess)
                 weakProcess->send(Messages::WebProcess::SetMediaAccessibilityPreferences(captionDisplayMode, preferredLanguages), 0);
         });
@@ -387,7 +386,8 @@ void WebProcessPool::platformInitializeWebProcess(const WebProcessProxy& process
             parameters.audioCaptureExtensionHandle = WTFMove(*handle);
     }
 #else
-    UNUSED_PARAM(mediaDevicesEnabled);
+    UNUSED_VARIABLE(mediaDevicesEnabled);
+    UNUSED_VARIABLE(isSafari);
 #endif
 #endif
 
@@ -437,8 +437,11 @@ void WebProcessPool::platformInitializeWebProcess(const WebProcessProxy& process
 
 #if HAVE(VIDEO_RESTRICTED_DECODING)
 #if PLATFORM(MAC)
-    if (MacApplication::isAppleMail())
-        parameters.videoDecoderExtensionHandles = SandboxExtension::createHandlesForMachLookup({ "com.apple.coremedia.videodecoder"_s, "com.apple.trustd.agent"_s }, std::nullopt);
+    if (MacApplication::isAppleMail()) {
+        if (auto trustdExtensionHandle = SandboxExtension::createHandleForMachLookup("com.apple.trustd.agent"_s, std::nullopt))
+            parameters.trustdExtensionHandle = WTFMove(*trustdExtensionHandle);
+        parameters.restrictImageAndVideoDecoders = true;
+    }
 #else
     parameters.restrictImageAndVideoDecoders = IOSApplication::isMobileMail() || IOSApplication::isMailCompositionService();
 #endif // PLATFORM(MAC)
@@ -947,9 +950,6 @@ static bool isCaptivePortalModeEnabledBySystemIgnoringCaching()
 {
     if (auto& enabledForTesting = isCaptivePortalModeEnabledGloballyForTesting())
         return *enabledForTesting;
-
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:[NSString stringWithUTF8String:WebKitCaptivePortalModeChangedNotification_Legacy]])
-        return true;
 
     if (![_WKSystemPreferences isCaptivePortalModeEnabled])
         return false;

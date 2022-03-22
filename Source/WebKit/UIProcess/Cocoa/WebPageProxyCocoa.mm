@@ -198,8 +198,9 @@ void WebPageProxy::addPlatformLoadParameters(WebProcessProxy& process, LoadParam
 {
     loadParameters.dataDetectionContext = m_uiClient->dataDetectionContext();
 
+#if !ENABLE(CONTENT_FILTERING_IN_NETWORKING_PROCESS)
     loadParameters.networkExtensionSandboxExtensionHandles = createNetworkExtensionsSandboxExtensions(process);
-    
+#endif
 #if PLATFORM(IOS)
     if (!process.hasManagedSessionSandboxAccess() && [getWebFilterEvaluatorClass() isManagedSession]) {
         if (auto handle = SandboxExtension::createHandleForMachLookup("com.apple.uikit.viewservice.com.apple.WebContentFilter.remoteUI"_s, std::nullopt))
@@ -373,6 +374,37 @@ void WebPageProxy::insertDictatedTextAsync(const String& text, const EditingRang
     send(Messages::WebPage::InsertDictatedTextAsync { text, replacementRange, dictationAlternatives, WTFMove(options) });
 }
 
+void WebPageProxy::addDictationAlternative(TextAlternativeWithRange&& alternative)
+{
+    if (!hasRunningProcess())
+        return;
+
+    auto nsAlternatives = alternative.alternatives.get();
+    auto context = pageClient().addDictationAlternatives(nsAlternatives);
+    sendWithAsyncReply(Messages::WebPage::AddDictationAlternative { nsAlternatives.primaryString, context }, [context, weakThis = WeakPtr { *this }](bool success) {
+        if (RefPtr protectedThis = weakThis.get(); protectedThis && !success)
+            protectedThis->removeDictationAlternatives(context);
+    });
+}
+
+void WebPageProxy::dictationAlternativesAtSelection(CompletionHandler<void(Vector<DictationContext>&&)>&& completion)
+{
+    if (!hasRunningProcess()) {
+        completion({ });
+        return;
+    }
+
+    sendWithAsyncReply(Messages::WebPage::DictationAlternativesAtSelection(), WTFMove(completion));
+}
+
+void WebPageProxy::clearDictationAlternatives(Vector<DictationContext>&& alternativesToClear)
+{
+    if (!hasRunningProcess() || alternativesToClear.isEmpty())
+        return;
+
+    send(Messages::WebPage::ClearDictationAlternatives(WTFMove(alternativesToClear)));
+}
+
 #if USE(DICTATION_ALTERNATIVES)
 
 NSTextAlternatives *WebPageProxy::platformDictationAlternatives(WebCore::DictationContext dictationContext)
@@ -451,9 +483,9 @@ void WebPageProxy::speakingErrorOccurred(WebCore::PlatformSpeechSynthesisUtteran
     send(Messages::WebPage::SpeakingErrorOccurred());
 }
 
-void WebPageProxy::boundaryEventOccurred(WebCore::PlatformSpeechSynthesisUtterance&, WebCore::SpeechBoundary speechBoundary, unsigned charIndex)
+void WebPageProxy::boundaryEventOccurred(WebCore::PlatformSpeechSynthesisUtterance&, WebCore::SpeechBoundary speechBoundary, unsigned charIndex, unsigned charLength)
 {
-    send(Messages::WebPage::BoundaryEventOccurred(speechBoundary == WebCore::SpeechBoundary::SpeechWordBoundary, charIndex));
+    send(Messages::WebPage::BoundaryEventOccurred(speechBoundary == WebCore::SpeechBoundary::SpeechWordBoundary, charIndex, charLength));
 }
 
 void WebPageProxy::voicesDidChange()
@@ -477,13 +509,6 @@ void WebPageProxy::didCreateContextInGPUProcessForVisibilityPropagation(LayerHos
 }
 #endif // ENABLE(GPU_PROCESS)
 #endif // HAVE(VISIBILITY_PROPAGATION_VIEW)
-
-void WebPageProxy::grantAccessToPreferenceService()
-{
-#if ENABLE(CFPREFS_DIRECT_MODE)
-    process().unblockPreferenceServiceIfNeeded();
-#endif
-}
 
 #if ENABLE(MEDIA_USAGE)
 MediaUsageManager& WebPageProxy::mediaUsageManager()
@@ -760,6 +785,7 @@ void WebPageProxy::abortApplePayAMSUISession()
 
 #endif // ENABLE(APPLE_PAY_AMS_UI)
 
+#if !ENABLE(CONTENT_FILTERING_IN_NETWORKING_PROCESS)
 Vector<SandboxExtension::Handle> WebPageProxy::createNetworkExtensionsSandboxExtensions(WebProcessProxy& process)
 {
 #if ENABLE(CONTENT_FILTERING)
@@ -772,6 +798,7 @@ Vector<SandboxExtension::Handle> WebPageProxy::createNetworkExtensionsSandboxExt
 #endif
     return { };
 }
+#endif
 
 #if ENABLE(CONTEXT_MENUS)
 #if HAVE(TRANSLATION_UI_SERVICES)

@@ -29,7 +29,7 @@
 
 #include "FloatRect.h"
 #include "InlineIteratorInlineBox.h"
-#include "InlineIteratorLine.h"
+#include "InlineIteratorLineBox.h"
 #include "InlineIteratorTextBox.h"
 #include "LayoutIntegrationBoxTree.h"
 #include "LayoutPoint.h"
@@ -48,6 +48,9 @@ class RenderBox;
 class RenderBoxModelObject;
 class RenderInline;
 class RenderLineBreak;
+class RenderListItem;
+class RenderListMarker;
+class RenderTable;
 struct PaintInfo;
 
 namespace Layout {
@@ -75,10 +78,14 @@ public:
 
     bool shouldSwitchToLegacyOnInvalidation() const;
 
+    void updateFormattingRootGeometryAndInvalidate();
     void updateReplacedDimensions(const RenderBox&);
     void updateInlineBlockDimensions(const RenderBlock&);
     void updateLineBreakBoxDimensions(const RenderLineBreak&);
     void updateInlineBoxDimensions(const RenderInline&);
+    void updateInlineTableDimensions(const RenderTable&);
+    void updateListItemDimensions(const RenderListItem&);
+    void updateListMarkerDimensions(const RenderListMarker&);
     void updateStyle(const RenderBoxModelObject&, const RenderStyle& oldStyle);
 
     std::pair<LayoutUnit, LayoutUnit> computeIntrinsicWidthConstraints();
@@ -104,8 +111,8 @@ public:
     InlineIterator::LeafBoxIterator boxFor(const RenderElement&) const;
     InlineIterator::InlineBoxIterator firstInlineBoxFor(const RenderInline&) const;
     InlineIterator::InlineBoxIterator firstRootInlineBox() const;
-    InlineIterator::LineIterator firstLine() const;
-    InlineIterator::LineIterator lastLine() const;
+    InlineIterator::LineBoxIterator firstLineBox() const;
+    InlineIterator::LineBoxIterator lastLineBox() const;
 
     LayoutRect firstInlineBoxRect(const RenderInline&) const;
     LayoutRect enclosingBorderBoxRectFor(const RenderInline&) const;
@@ -124,7 +131,6 @@ public:
 
 private:
     void prepareLayoutState();
-    void updateFormattingRootGeometryAndInvalidate();
     void prepareFloatingState();
     void constructContent();
     InlineContent& ensureInlineContent();

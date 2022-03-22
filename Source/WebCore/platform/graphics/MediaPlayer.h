@@ -291,6 +291,8 @@ public:
     virtual void mediaPlayerOnNewVideoFrameMetadata(VideoFrameMetadata&&, RetainPtr<CVPixelBufferRef>&&) { }
 #endif
 
+    virtual bool mediaPlayerPrefersSandboxedParsing() const { return false; }
+
 #if !RELEASE_LOG_DISABLED
     virtual const void* mediaPlayerLogIdentifier() { return nullptr; }
     virtual const Logger& mediaPlayerLogger() = 0;
@@ -695,6 +697,12 @@ public:
     void startVideoFrameMetadataGathering();
     void stopVideoFrameMetadataGathering();
 
+    void playerContentBoxRectChanged(const LayoutRect&);
+
+    String lastErrorMessage() const;
+
+    bool prefersSandboxedParsing() const { return client().mediaPlayerPrefersSandboxedParsing(); }
+
 private:
     MediaPlayer(MediaPlayerClient&);
     MediaPlayer(MediaPlayerClient&, MediaPlayerEnums::MediaEngineIdentifier);
@@ -739,6 +747,7 @@ private:
     bool m_shouldContinueAfterKeyNeeded { false };
 #endif
     bool m_isGatheringVideoFrameMetadata { false };
+    String m_lastErrorMessage;
 };
 
 class MediaPlayerFactory {

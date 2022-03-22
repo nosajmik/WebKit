@@ -734,7 +734,7 @@ enum class TextTransform : uint8_t {
     None
 };
 
-static const size_t TextDecorationBits = 4;
+static const size_t TextDecorationLineBits = 4;
 enum class TextDecorationLine : uint8_t {
     None          = 0,
     Underline     = 1 << 0,
@@ -1161,34 +1161,6 @@ enum class TrailingWord : uint8_t {
 };
 #endif
 
-#if ENABLE(APPLE_PAY)
-enum class ApplePayButtonStyle : uint8_t {
-    White,
-    WhiteOutline,
-    Black,
-};
-
-enum class ApplePayButtonType : uint8_t {
-    Plain,
-    Buy,
-    SetUp,
-    Donate,
-    CheckOut,
-    Book,
-    Subscribe,
-#if ENABLE(APPLE_PAY_NEW_BUTTON_TYPES)
-    Reload,
-    AddMoney,
-    TopUp,
-    Order,
-    Rent,
-    Support,
-    Contribute,
-    Tip,
-#endif
-};
-#endif
-
 // These are all minimized combinations of paint-order.
 enum class PaintOrder : uint8_t {
     Normal,
@@ -1244,10 +1216,6 @@ extern const float defaultMiterLimit;
 
 WTF::TextStream& operator<<(WTF::TextStream&, AnimationFillMode);
 WTF::TextStream& operator<<(WTF::TextStream&, AnimationPlayState);
-#if ENABLE(APPLE_PAY)
-WTF::TextStream& operator<<(WTF::TextStream&, ApplePayButtonStyle);
-WTF::TextStream& operator<<(WTF::TextStream&, ApplePayButtonType);
-#endif
 WTF::TextStream& operator<<(WTF::TextStream&, AspectRatioType);
 WTF::TextStream& operator<<(WTF::TextStream&, AutoRepeatType);
 WTF::TextStream& operator<<(WTF::TextStream&, BackfaceVisibility);

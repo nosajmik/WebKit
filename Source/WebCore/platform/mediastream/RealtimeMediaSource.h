@@ -38,11 +38,11 @@
 #include "CaptureDevice.h"
 #include "Image.h"
 #include "MediaConstraints.h"
-#include "MediaSample.h"
 #include "PlatformLayer.h"
 #include "RealtimeMediaSourceCapabilities.h"
 #include "RealtimeMediaSourceFactory.h"
-#include "VideoSampleMetadata.h"
+#include "VideoFrame.h"
+#include "VideoFrameTimeMetadata.h"
 #include <wtf/CompletionHandler.h>
 #include <wtf/Lock.h>
 #include <wtf/LoggerHelper.h>
@@ -64,12 +64,12 @@ class MediaStreamPrivate;
 class OrientationNotifier;
 class PlatformAudioData;
 class RealtimeMediaSourceSettings;
-class RemoteVideoSample;
 
 struct CaptureSourceOrError;
 
 class WEBCORE_EXPORT RealtimeMediaSource
     : public ThreadSafeRefCounted<RealtimeMediaSource, WTF::DestructionThread::MainRunLoop>
+    , public CanMakeWeakPtr<RealtimeMediaSource>
 #if !RELEASE_LOG_DISABLED
     , public LoggerHelper
 #endif
@@ -98,12 +98,12 @@ public:
         // May be called on a background thread.
         virtual void audioSamplesAvailable(const MediaTime&, const PlatformAudioData&, const AudioStreamDescription&, size_t /*numberOfFrames*/) = 0;
     };
-    class VideoSampleObserver {
+    class VideoFrameObserver {
     public:
-        virtual ~VideoSampleObserver() = default;
+        virtual ~VideoFrameObserver() = default;
 
         // May be called on a background thread.
-        virtual void videoSampleAvailable(MediaSample&, VideoSampleMetadata) = 0;
+        virtual void videoFrameAvailable(VideoFrame&, VideoFrameTimeMetadata) = 0;
     };
 
     virtual ~RealtimeMediaSource() = default;
@@ -125,6 +125,7 @@ public:
     virtual bool isProducingData() const;
     void start();
     void stop();
+    void endImmediatly() { end(nullptr); }
     virtual void requestToEnd(Observer& callingObserver);
     bool isEnded() const { return m_isEnded; }
 
@@ -146,8 +147,8 @@ public:
     WEBCORE_EXPORT void addAudioSampleObserver(AudioSampleObserver&);
     WEBCORE_EXPORT void removeAudioSampleObserver(AudioSampleObserver&);
 
-    WEBCORE_EXPORT void addVideoSampleObserver(VideoSampleObserver&);
-    WEBCORE_EXPORT void removeVideoSampleObserver(VideoSampleObserver&);
+    WEBCORE_EXPORT void addVideoFrameObserver(VideoFrameObserver&);
+    WEBCORE_EXPORT void removeVideoFrameObserver(VideoFrameObserver&);
 
     const IntSize size() const;
     void setSize(const IntSize&);
@@ -222,8 +223,10 @@ public:
 
     virtual bool setShouldApplyRotation(bool) { return false; }
 
+    PageIdentifier pageIdentifier() const { return m_pageIdentifier; }
+
 protected:
-    RealtimeMediaSource(Type, String&& name, String&& deviceID = { }, String&& hashSalt = { });
+    RealtimeMediaSource(Type, String&& name, String&& deviceID = { }, String&& hashSalt = { }, PageIdentifier = { });
 
     void scheduleDeferredTask(Function<void()>&&);
 
@@ -247,7 +250,7 @@ protected:
     void initializeSampleRate(int sampleRate) { m_sampleRate = sampleRate; }
     void initializeEchoCancellation(bool echoCancellation) { m_echoCancellation = echoCancellation; }
 
-    void videoSampleAvailable(MediaSample&, VideoSampleMetadata);
+    void videoFrameAvailable(VideoFrame&, VideoFrameTimeMetadata);
     void audioSamplesAvailable(const MediaTime&, const PlatformAudioData&, const AudioStreamDescription&, size_t);
 
     void forEachObserver(const Function<void(Observer&)>&);
@@ -259,6 +262,7 @@ protected:
 private:
     virtual void startProducingData() { }
     virtual void stopProducingData() { }
+    virtual void endProducingData() { stop(); }
     virtual void settingsDidChange(OptionSet<RealtimeMediaSourceSettings::Flag>) { }
 
     virtual void stopBeingObserved() { stop(); }
@@ -274,6 +278,7 @@ private:
     unsigned m_frameCount { 0 };
 #endif
 
+    PageIdentifier m_pageIdentifier;
     String m_idHashSalt;
     String m_hashedID;
     String m_persistentID;
@@ -284,8 +289,8 @@ private:
     mutable Lock m_audioSampleObserversLock;
     HashSet<AudioSampleObserver*> m_audioSampleObservers WTF_GUARDED_BY_LOCK(m_audioSampleObserversLock);
 
-    mutable Lock m_videoSampleObserversLock;
-    HashSet<VideoSampleObserver*> m_videoSampleObservers WTF_GUARDED_BY_LOCK(m_videoSampleObserversLock);
+    mutable Lock m_VideoFrameObserversLock;
+    HashSet<VideoFrameObserver*> m_VideoFrameObservers WTF_GUARDED_BY_LOCK(m_VideoFrameObserversLock);
 
     // Set on the main thread from constraints.
     IntSize m_size;

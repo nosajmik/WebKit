@@ -59,6 +59,7 @@ Interpolate = properties.Interpolate
 GITHUB_URL = 'https://github.com/'
 GITHUB_PROJECTS = ['WebKit/WebKit']
 HASH_LENGTH_TO_DISPLAY = 8
+DEFAULT_BRANCH = 'main'
 
 
 class BufferLogHeaderObserver(logobserver.BufferLogObserver):
@@ -139,6 +140,9 @@ class GitHubMixin(object):
     addURLs = False
     pr_open_states = ['open']
     pr_closed_states = ['closed']
+    BLOCKED_LABEL = 'merging-blocked'
+    MERGE_QUEUE_LABEL = 'merge-queue'
+    FAST_MERGE_QUEUE_LABEL = 'fast-merge-queue'
 
     def fetch_data_from_url_with_authentication(self, url):
         response = None
@@ -158,7 +162,7 @@ class GitHubMixin(object):
             return None
         return response
 
-    def get_pr_json(self, pr_number, repository_url=None):
+    def get_pr_json(self, pr_number, repository_url=None, retry=0):
         api_url = GitHub.api_url(repository_url)
         if not api_url:
             return None
@@ -167,14 +171,40 @@ class GitHubMixin(object):
         content = self.fetch_data_from_url_with_authentication(pr_url)
         if not content:
             return None
-        try:
-            pr_json = content.json()
-        except Exception as e:
-            print('Failed to get pull request data from {}, error: {}'.format(pr_url, e))
-            return None
-        if not pr_json or len(pr_json) == 0:
-            return None
-        return pr_json
+
+        for attempt in range(retry + 1):
+            try:
+                pr_json = content.json()
+                if pr_json and len(pr_json):
+                    return pr_json
+            except Exception as e:
+                self._addToLog('stdio', 'Failed to get pull request data from {}, error: {}'.format(pr_url, e))
+            
+            self._addToLog('stdio', 'Unable to fetch pull request {}.\n'.format(pr_number))
+            if attempt > retry:
+                return None
+            wait_for = (attempt + 1) * 15
+            self._addToLog('stdio', 'Backing off for {} seconds before retrying.\n'.format(wait_for))
+            time.sleep(wait_for)
+
+        return None
+
+    def get_reviewers(self, pr_number, repository_url=None):
+        api_url = GitHub.api_url(repository_url)
+        if not api_url:
+            return []
+
+        reviews_url = f'{api_url}/pulls/{pr_number}/reviews'
+        content = self.fetch_data_from_url_with_authentication(reviews_url)
+        if not content:
+            return []
+
+        result = []
+        for review in (content.json() or []):
+            reviewer = review.get('user', {}).get('login')
+            if reviewer and review.get('state') == 'APPROVED':
+                result.append(reviewer)
+        return result
 
     def _is_pr_closed(self, pr_json):
         if not pr_json or not pr_json.get('state'):
@@ -191,16 +221,114 @@ class GitHubMixin(object):
             return -1
         return 0 if pr_sha == self.getProperty('github.head.sha', '?') else 1
 
+    def _is_pr_blocked(self, pr_json):
+        for label in (pr_json or {}).get('labels', {}):
+            if label.get('name', '') == self.BLOCKED_LABEL:
+                return 1
+        return 0
+
+    def _is_pr_in_merge_queue(self, pr_json):
+        for label in (pr_json or {}).get('labels', {}):
+            if label.get('name', '') in (self.MERGE_QUEUE_LABEL, self.FAST_MERGE_QUEUE_LABEL):
+                return 1
+        return 0
+
+    def _is_pr_draft(self, pr_json):
+        if pr_json.get('draft', False):
+            return 1
+        return 0
+
     def should_send_email_for_pr(self, pr_number):
         pr_json = self.get_pr_json(pr_number)
         if not pr_json:
-            self._addToLog('stdio', 'Unable to fetch PR #{}\n'.format(pr_number))
             return True
 
         if 1 == self._is_hash_outdated(pr_json):
             self._addToLog('stdio', 'Skipping email since hash {} on PR #{} is outdated\n'.format(
                 self.getProperty('github.head.sha', '?')[:HASH_LENGTH_TO_DISPLAY], pr_number,
             ))
+            return False
+        return True
+
+    def add_label(self, pr_number, label, repository_url=None):
+        api_url = GitHub.api_url(repository_url)
+        if not api_url:
+            return False
+
+        pr_label_url = '{}/issues/{}/labels'.format(api_url, pr_number)
+        try:
+            username, access_token = GitHub.credentials()
+            auth = HTTPBasicAuth(username, access_token) if username and access_token else None
+            response = requests.request(
+                'POST', pr_label_url, timeout=60, auth=auth,
+                headers=dict(Accept='application/vnd.github.v3+json'),
+                json=dict(labels=[label]),
+            )
+            if response.status_code // 100 != 2:
+                self._addToLog('stdio', f"Unable to add '{label}' label on PR {pr_number}. Unexpected response code from GitHub: {response.status_code}\n")
+                return False
+        except Exception as e:
+            self._addToLog('stdio', f"Error in adding '{label}' label on PR {pr_number}\n")
+            return False
+        return True
+
+    def remove_labels(self, pr_number, labels=None, repository_url=None):
+        labels = labels or []
+        if not labels:
+            return True
+        api_url = GitHub.api_url(repository_url)
+        if not api_url:
+            return False
+
+        pr_label_url = f'{api_url}/issues/{pr_number}/labels'
+        content = self.fetch_data_from_url_with_authentication(pr_label_url)
+        if not content:
+            self._addToLog('stdio', "Failed to fetch existing labels, cannot remove labels\n")
+            return True
+
+        existing_labels = [label.get('name') for label in (content.json() or [])]
+        new_labels = list(filter(lambda label: label not in labels, existing_labels))
+        if len(existing_labels) == len(new_labels):
+            return True
+
+        try:
+            username, access_token = GitHub.credentials()
+            auth = HTTPBasicAuth(username, access_token) if username and access_token else None
+            response = requests.request(
+                'PUT', pr_label_url, timeout=60, auth=auth,
+                headers=dict(Accept='application/vnd.github.v3+json'),
+                json=dict(labels=new_labels),
+            )
+            if response.status_code // 100 != 2:
+                for label in labels:
+                    self._addToLog('stdio', f"Unable to remove '{label}' label on PR {pr_number}. Unexpected response code from GitHub: {response.status_code}\n")
+                return False
+        except Exception as e:
+            for label in labels:
+                self._addToLog('stdio', f"Error in removing '{label}' label on PR {pr_number}\n")
+            return False
+        return True
+
+    def comment_on_pr(self, pr_number, content, repository_url=None):
+        api_url = GitHub.api_url(repository_url)
+        if not api_url:
+            return False
+
+        comment_url = f'{api_url}/issues/{pr_number}/comments'
+        try:
+            username, access_token = GitHub.credentials()
+            auth = HTTPBasicAuth(username, access_token) if username and access_token else None
+            response = requests.request(
+                'POST', comment_url, timeout=60, auth=auth,
+                headers=dict(Accept='application/vnd.github.v3+json'),
+                json=dict(body=content),
+            )
+            if response.status_code // 100 != 2:
+                self._addToLog('stdio', f"Failed to post comment to PR {pr_number}. Unexpected response code from GitHub: {response.status_code}\n")
+                return False
+        except Exception as e:
+            for label in labels:
+                self._addToLog('stdio', f"Error in posting comment to PR {pr_number}\n")
             return False
         return True
 
@@ -213,7 +341,7 @@ class ShellMixin(object):
 
     def shell_command(self, command):
         if self.has_windows_shell():
-            return ['cmd', '/c', command]
+            return ['sh', '-c', command]
         return ['/bin/sh', '-c', command]
 
     def shell_exit_0(self):
@@ -509,7 +637,7 @@ class ShowIdentifier(shell.ShellCommand):
         if match:
             identifier = match.group(1)
             if identifier:
-                identifier = identifier.replace('master', 'main')
+                identifier = identifier.replace('master', DEFAULT_BRANCH)
             self.setProperty('identifier', identifier)
             ews_revision = self.getProperty('ews_revision')
             if ews_revision:
@@ -611,9 +739,9 @@ class ApplyPatch(shell.ShellCommand, CompositeStepMixin, ShellMixin):
             shell.ShellCommand.start(self)
             return None
 
-        patch_reviewer_name = self.getProperty('patch_reviewer_full_name', '')
-        if patch_reviewer_name:
-            self.command.extend(['--reviewer', patch_reviewer_name])
+        reviewers_names = self.getProperty('reviewers_full_names', [])
+        if reviewers_names:
+            self.command.extend(['--reviewer', reviewers_names[0]])
         d = self.downloadFileContentToWorker('.buildbot-diff', patch)
         d.addCallback(lambda res: shell.ShellCommand.start(self))
 
@@ -634,9 +762,9 @@ class ApplyPatch(shell.ShellCommand, CompositeStepMixin, ShellMixin):
             message = 'Tools/Scripts/svn-apply failed to apply patch {} to trunk'.format(patch_id)
             if self.getProperty('buildername', '').lower() == 'commit-queue':
                 comment_text = '{}.\nPlease resolve the conflicts and upload a new patch.'.format(message.replace('patch', 'attachment'))
-                self.setProperty('bugzilla_comment_text', comment_text)
+                self.setProperty('comment_text', comment_text)
                 self.setProperty('build_finish_summary', message)
-                self.build.addStepsAfterCurrentStep([CommentOnBug(), SetCommitQueueMinusFlagOnPatch()])
+                self.build.addStepsAfterCurrentStep([LeaveComment(), SetCommitQueueMinusFlagOnPatch()])
             else:
                 self.build.buildFinished([message], FAILURE)
         return rc
@@ -666,7 +794,7 @@ class CheckOutPullRequest(steps.ShellSequence, ShellMixin):
 
         remote = self.getProperty('github.head.repo.full_name', 'origin').split('/')[0]
         project = self.getProperty('github.head.repo.full_name', self.getProperty('project'))
-        pr_branch = self.getProperty('github.head.ref', 'main')
+        pr_branch = self.getProperty('github.head.ref', DEFAULT_BRANCH)
         base_hash = self.getProperty('github.base.sha')
         rebase_target_hash = self.getProperty('ews_revision') or self.getProperty('got_revision')
 
@@ -1026,10 +1154,10 @@ class BugzillaMixin(object):
             if flag.get('name') == 'review':
                 review_status = flag.get('status')
                 if review_status == '+':
-                    patch_reviewer = flag.get('setter', '')
-                    self.setProperty('patch_reviewer', patch_reviewer)
+                    reviewer = flag.get('setter', '')
+                    self.setProperty('reviewer', reviewer)
                     if self.addURLs:
-                        self.addURL('Reviewed by: {}'.format(patch_reviewer), '')
+                        self.addURL('Reviewed by: {}'.format(reviewer), '')
                     return 1
                 if review_status in ['-', '?']:
                     self._addToLog('stdio', 'Patch {} is marked r{}.\n'.format(patch_id, review_status))
@@ -1184,11 +1312,22 @@ class ValidateChange(buildstep.BuildStep, BugzillaMixin, GitHubMixin):
     flunkOnFailure = True
     haltOnFailure = True
 
-    def __init__(self, verifyObsolete=True, verifyBugClosed=True, verifyReviewDenied=True, addURLs=True, verifycqplus=False):
+    def __init__(
+        self,
+        verifyObsolete=True,
+        verifyBugClosed=True,
+        verifyReviewDenied=True,
+        addURLs=True,
+        verifycqplus=False,
+        verifyMergeQueue=False,
+        verifyNoDraftForMergeQueue=False,
+    ):
         self.verifyObsolete = verifyObsolete
         self.verifyBugClosed = verifyBugClosed
         self.verifyReviewDenied = verifyReviewDenied
         self.verifycqplus = verifycqplus
+        self.verifyMergeQueue = verifyMergeQueue
+        self.verifyNoDraftForMergeQueue = verifyNoDraftForMergeQueue
         self.addURLs = addURLs
         buildstep.BuildStep.__init__(self)
 
@@ -1206,6 +1345,13 @@ class ValidateChange(buildstep.BuildStep, BugzillaMixin, GitHubMixin):
         self.build.results = SKIPPED
         self.descriptionDone = reason
         self.build.buildFinished([reason], SKIPPED)
+
+    def fail_build(self, reason):
+        self._addToLog('stdio', reason)
+        self.finished(FAILURE)
+        self.build.results = FAILURE
+        self.descriptionDone = reason
+        self.build.buildFinished([reason], FAILURE)
 
     def start(self):
         patch_id = self.getProperty('patch_id', '')
@@ -1237,6 +1383,10 @@ class ValidateChange(buildstep.BuildStep, BugzillaMixin, GitHubMixin):
         if self.verifycqplus and patch_id:
             self._addToLog('stdio', 'Change is in commit queue.\n')
             self._addToLog('stdio', 'Change has been reviewed.\n')
+        if self.verifyNoDraftForMergeQueue and pr_number:
+            self._addToLog('stdio', 'Change is not a draft.\n')
+        if self.verifyMergeQueue and pr_number:
+            self._addToLog('stdio', 'Change is in merge queue.\n')
         self.finished(SUCCESS)
         return None
 
@@ -1278,10 +1428,7 @@ class ValidateChange(buildstep.BuildStep, BugzillaMixin, GitHubMixin):
             return False
 
         repository_url = self.getProperty('repository', '')
-
-        pr_json = self.get_pr_json(pr_number, repository_url)
-        if not pr_json:
-            self._addToLog('stdio', 'Unable to fetch pull request {}.\n'.format(pr_number))
+        pr_json = self.get_pr_json(pr_number, repository_url, retry=3)
 
         pr_closed = self._is_pr_closed(pr_json) if self.verifyBugClosed else 0
         if pr_closed == 1:
@@ -1293,19 +1440,34 @@ class ValidateChange(buildstep.BuildStep, BugzillaMixin, GitHubMixin):
             self.skip_build('Hash {} on PR {} is outdated'.format(self.getProperty('github.head.sha', '?')[:HASH_LENGTH_TO_DISPLAY], pr_number))
             return False
 
-        if obsolete == -1 or pr_closed == -1:
+        blocked = self._is_pr_blocked(pr_json) if self.verifyReviewDenied else 0
+        if blocked == 1:
+            self.skip_build("PR {} has been marked as '{}'".format(pr_number, self.BLOCKED_LABEL))
+            return False
+
+        merge_queue = self._is_pr_in_merge_queue(pr_json) if self.verifyMergeQueue else 1
+        if merge_queue == 0:
+            self.skip_build("PR {} does not have a merge queue label".format(pr_number))
+            return False
+
+        draft = self._is_pr_draft(pr_json) if self.verifyNoDraftForMergeQueue else 0
+        if draft == 1:
+            self.fail_build("PR {} is a draft pull request".format(pr_number))
+            return False
+
+        if -1 in (obsolete, pr_closed, blocked, merge_queue, draft):
             self.finished(WARNINGS)
             return False
 
         return True
 
 
-class ValidateCommiterAndReviewer(buildstep.BuildStep):
+class ValidateCommitterAndReviewer(buildstep.BuildStep, GitHubMixin):
     name = 'validate-commiter-and-reviewer'
     descriptionDone = ['Validated commiter and reviewer']
 
     def __init__(self, *args, **kwargs):
-        super(ValidateCommiterAndReviewer, self).__init__(*args, **kwargs)
+        super(ValidateCommitterAndReviewer, self).__init__(*args, **kwargs)
         self.contributors = {}
 
     @defer.inlineCallbacks
@@ -1321,15 +1483,21 @@ class ValidateCommiterAndReviewer(buildstep.BuildStep):
             return {'step': self.descriptionDone}
         return buildstep.BuildStep.getResultSummary(self)
 
-    def fail_build(self, email, status):
-        reason = '{} does not have {} permissions'.format(email, status)
-        comment = '{} does not have {} permissions according to {}.'.format(email, status, Contributors.url)
-        comment += '\n\nRejecting attachment {} from commit queue.'.format(self.getProperty('patch_id', ''))
-        self.setProperty('bugzilla_comment_text', comment)
+    def fail_build(self, email_or_username, status):
+        patch_id = self.getProperty('patch_id', '')
+        pr_number = self.getProperty('github.number', '')
+
+        reason = f'{email_or_username} does not have {status} permissions'
+        comment = f'{"@" if pr_number else ""}{email_or_username} does not have {status} permissions according to {Contributors.url}.'
+        if patch_id:
+            comment += f'\n\nRejecting attachment {patch_id} from commit queue.'
+        elif pr_number:
+            comment += f'\n\nRejecting {self.getProperty("github.head.sha", f"#{pr_number}")} from merge queue.'
+        self.setProperty('comment_text', comment)
 
         self._addToLog('stdio', reason)
         self.setProperty('build_finish_summary', reason)
-        self.build.addStepsAfterCurrentStep([CommentOnBug(), SetCommitQueueMinusFlagOnPatch()])
+        self.build.addStepsAfterCurrentStep([LeaveComment(), BlockPullRequest(), SetCommitQueueMinusFlagOnPatch()])
         self.finished(FAILURE)
         self.descriptionDone = reason
 
@@ -1358,24 +1526,40 @@ class ValidateCommiterAndReviewer(buildstep.BuildStep):
             self.descriptionDone = 'Failed to get contributors information'
             self.build.buildFinished(['Failed to get contributors information'], FAILURE)
             return None
-        patch_committer = self.getProperty('patch_committer', '').lower()
-        if not self.is_committer(patch_committer):
-            self.fail_build(patch_committer, 'committer')
-            return None
-        self._addToLog('stdio', '{} is a valid commiter.\n'.format(patch_committer))
 
-        patch_reviewer = self.getProperty('patch_reviewer', '').lower()
-        if not patch_reviewer:
-            # Patch does not have r+ flag. This is acceptable, since the ChangeLog might have 'Reviewed by' in it.
+        pr_number = self.getProperty('github.number', '')
+
+        if pr_number:
+            committer = (self.getProperty('owners', []) or [''])[0]
+        else:
+            committer = self.getProperty('patch_committer', '').lower()
+
+        if not self.is_committer(committer):
+            self.fail_build(committer, 'committer')
+            return None
+        self._addToLog('stdio', f'{committer} is a valid commiter.\n')
+
+        if pr_number:
+            reviewers = self.get_reviewers(pr_number, self.getProperty('repository', ''))
+            if any([self.is_reviewer(reviewer) for reviewer in reviewers]):
+                reviewers = list(filter(self.is_reviewer, reviewers))
+        else:
+            reviewer = self.getProperty('reviewer', '').lower()
+            reviewers = [reviewer] if reviewer else []
+
+        if not reviewers:
+            # Change has not been reviewed in bug tracker. This is acceptable, since the ChangeLog might have 'Reviewed by' in it.
             self.descriptionDone = 'Validated committer'
             self.finished(SUCCESS)
             return None
 
-        self.setProperty('patch_reviewer_full_name', self.full_name_from_email(patch_reviewer))
-        if not self.is_reviewer(patch_reviewer):
-            self.fail_build(patch_reviewer, 'reviewer')
-            return None
-        self._addToLog('stdio', '{} is a valid reviewer.\n'.format(patch_reviewer))
+        for reviewer in reviewers:
+            if not self.is_reviewer(reviewer):
+                self.fail_build(reviewer, 'reviewer')
+                return None
+            self._addToLog('stdio', f'{reviewer} is a valid reviewer.\n')
+        self.setProperty('reviewers_full_names', [self.full_name_from_email(reviewer) for reviewer in reviewers])
+
         self.finished(SUCCESS)
         return None
 
@@ -1404,9 +1588,9 @@ class ValidateChangeLogAndReviewer(shell.ShellCommand):
         rc = shell.ShellCommand.evaluateCommand(self, cmd)
         if rc == FAILURE:
             log_text = self.log_observer.getStdout() + self.log_observer.getStderr()
-            self.setProperty('bugzilla_comment_text', log_text)
+            self.setProperty('comment_text', log_text)
             self.setProperty('build_finish_summary', 'ChangeLog validation failed')
-            self.build.addStepsAfterCurrentStep([CommentOnBug(), SetCommitQueueMinusFlagOnPatch()])
+            self.build.addStepsAfterCurrentStep([LeaveComment(), SetCommitQueueMinusFlagOnPatch()])
         return rc
 
 
@@ -1434,6 +1618,53 @@ class SetCommitQueueMinusFlagOnPatch(buildstep.BuildStep, BugzillaMixin):
 
     def doStepIf(self, step):
         return self.getProperty('patch_id', False)
+
+    def hideStepIf(self, results, step):
+        return not self.doStepIf(step)
+
+
+class BlockPullRequest(buildstep.BuildStep, GitHubMixin):
+    name = 'block-pull-request'
+
+    @defer.inlineCallbacks
+    def _addToLog(self, logName, message):
+        try:
+            log = self.getLog(logName)
+        except KeyError:
+            log = yield self.addLog(logName)
+        log.addStdout(message)
+
+    def start(self):
+        pr_number = self.getProperty('github.number', '')
+        build_finish_summary = self.getProperty('build_finish_summary', None)
+
+        rc = SKIPPED
+        if CURRENT_HOSTNAME == EWS_BUILD_HOSTNAME:
+            repository_url = self.getProperty('repository', '')
+            rc = SUCCESS
+            if any((
+                not self.remove_labels(pr_number, [self.MERGE_QUEUE_LABEL, self.FAST_MERGE_QUEUE_LABEL], repository_url=repository_url),
+                not self.add_label(pr_number, self.BLOCKED_LABEL, repository_url=repository_url),
+            )):
+                rc = FAILURE
+        self.finished(rc)
+        if build_finish_summary:
+            self.build.buildFinished([build_finish_summary], FAILURE)
+        return None
+
+    def getResultSummary(self):
+        if self.results == SUCCESS:
+            return {'step': f"Added '{self.BLOCKED_LABEL}' label to pull request"}
+        elif self.results == SKIPPED:
+            return buildstep.BuildStep.getResultSummary(self)
+        return {'step': f"Failed to add '{self.BLOCKED_LABEL}' label to pull request"}
+
+    def doStepIf(self, step):
+        return self.getProperty('github.number')
+
+    def hideStepIf(self, results, step):
+        return not self.doStepIf(step)
+
 
 
 class RemoveFlagsOnPatch(buildstep.BuildStep, BugzillaMixin):
@@ -1482,31 +1713,49 @@ class CloseBug(buildstep.BuildStep, BugzillaMixin):
         return {'step': 'Failed to close bug {}'.format(self.bug_id)}
 
 
-class CommentOnBug(buildstep.BuildStep, BugzillaMixin):
-    name = 'comment-on-bugzilla-bug'
+class LeaveComment(buildstep.BuildStep, BugzillaMixin, GitHubMixin):
+    name = 'leave-comment'
     flunkOnFailure = False
     haltOnFailure = False
 
     def start(self):
         self.bug_id = self.getProperty('bug_id', '')
-        self.comment_text = self.getProperty('bugzilla_comment_text', '')
+        self.pr_number = self.getProperty('github.number', '')
+        self.comment_text = self.getProperty('comment_text', '')
 
         if not self.comment_text:
-            self._addToLog('stdio', 'bugzilla_comment_text build property not found.\n')
-            self.descriptionDone = 'No bugzilla comment found'
+            self._addToLog('stdio', 'comment_text build property not found.\n')
+            self.descriptionDone = 'No comment found'
             self.finished(WARNINGS)
             return None
 
-        rc = self.comment_on_bug(self.bug_id, self.comment_text)
+        if self.pr_number:
+            rc = SUCCESS if self.comment_on_pr(self.pr_number, self.comment_text) else FAILURE
+        elif self.bug_id:
+            rc = self.comment_on_bug(self.bug_id, self.comment_text)
+        else:
+            self._addToLog('stdio', 'No bug or pull request to comment to.\n')
+            self.descriptionDone = 'No bug or PR found'
+            self.finished(FAILURE)
+            return None
+
         self.finished(rc)
         return None
 
     def getResultSummary(self):
         if self.results == SUCCESS:
-            return {'step': 'Added comment on bug {}'.format(self.bug_id)}
+            if self.pr_number:
+                return {'step': f'Added comment on PR {self.pr_number}'}
+            elif self.bug_id:
+                return {'step': f'Added comment on bug {self.bug_id}'}
         elif self.results == SKIPPED:
             return buildstep.BuildStep.getResultSummary(self)
-        return {'step': 'Failed to add comment on bug {}'.format(self.bug_id)}
+
+        if self.pr_number:
+            return {'step': f'Failed to add comment on PR {self.pr_number}'}
+        elif self.bug_id:
+            return {'step': f'Failed to add comment on bug {self.bug_id}'}
+        return {'step': 'Failed to add comment'}
 
     def doStepIf(self, step):
         return CURRENT_HOSTNAME == EWS_BUILD_HOSTNAME
@@ -2117,13 +2366,14 @@ class AnalyzeCompileWebKitResults(buildstep.BuildStep, BugzillaMixin, GitHubMixi
         self.finished(FAILURE)
         self.setProperty('build_finish_summary', message)
 
-        # FIXME: Need a cq- equivalent for GitHub
         if patch_id:
             if self.getProperty('buildername', '').lower() == 'commit-queue':
-                self.setProperty('bugzilla_comment_text', message)
-                self.build.addStepsAfterCurrentStep([CommentOnBug(), SetCommitQueueMinusFlagOnPatch()])
+                self.setProperty('comment_text', message)
+                self.build.addStepsAfterCurrentStep([LeaveComment(), SetCommitQueueMinusFlagOnPatch()])
             else:
                 self.build.addStepsAfterCurrentStep([SetCommitQueueMinusFlagOnPatch()])
+        else:
+            self.build.addStepsAfterCurrentStep([BlockPullRequest()])
 
     @defer.inlineCallbacks
     def getResults(self, name):
@@ -2944,10 +3194,10 @@ class AnalyzeLayoutTestsResults(buildstep.BuildStep, BugzillaMixin, GitHubMixin)
         self.setProperty('build_finish_summary', message)
 
         if self.getProperty('buildername', '').lower() == 'commit-queue':
-            self.setProperty('bugzilla_comment_text', message)
-            self.build.addStepsAfterCurrentStep([CommentOnBug(), SetCommitQueueMinusFlagOnPatch()])
+            self.setProperty('comment_text', message)
+            self.build.addStepsAfterCurrentStep([LeaveComment(), SetCommitQueueMinusFlagOnPatch()])
         else:
-            self.build.addStepsAfterCurrentStep([SetCommitQueueMinusFlagOnPatch()])
+            self.build.addStepsAfterCurrentStep([SetCommitQueueMinusFlagOnPatch(), BlockPullRequest()])
         return defer.succeed(None)
 
     def report_pre_existing_failures(self, clean_tree_failures, flaky_failures):
@@ -4021,7 +4271,7 @@ class CleanGitRepo(steps.ShellSequence, ShellMixin):
     flunkOnFailure = False
     logEnviron = False
 
-    def __init__(self, default_branch='main', remote='origin', **kwargs):
+    def __init__(self, default_branch=DEFAULT_BRANCH, remote='origin', **kwargs):
         super(CleanGitRepo, self).__init__(timeout=5 * 60, **kwargs)
         self.default_branch = default_branch
         self.git_remote = remote
@@ -4036,6 +4286,8 @@ class CleanGitRepo(steps.ShellSequence, ShellMixin):
             ['git', 'checkout', '{}/{}'.format(self.git_remote, branch), '-f'],  # Checkout branch from specific remote
             ['git', 'branch', '-D', '{}'.format(branch)],  # Delete any local cache of the specified branch
             ['git', 'checkout', '{}/{}'.format(self.git_remote, branch), '-b', '{}'.format(branch)],  # Checkout local instance of branch from remote
+            self.shell_command('git branch | grep -v {} | grep -v {} | xargs git branch -D || {}'.format(self.default_branch, branch, self.shell_exit_0())),
+            self.shell_command('git remote | grep -v {} | xargs -L 1 git remote rm || {}'.format(self.git_remote, self.shell_exit_0())),
         ]:
             self.commands.append(util.ShellArg(command=command, logname='stdio'))
         return super(CleanGitRepo, self).run()
@@ -4113,9 +4365,9 @@ class FindModifiedChangeLogs(shell.ShellCommand):
             patch_id = self.getProperty('patch_id', '')
             message = 'Unable to find any modified ChangeLog in Patch {}'.format(patch_id)
             if self.getProperty('buildername', '').lower() == 'commit-queue':
-                self.setProperty('bugzilla_comment_text', message.replace('Patch', 'Attachment'))
+                self.setProperty('comment_text', message.replace('Patch', 'Attachment'))
                 self.setProperty('build_finish_summary', message)
-                self.build.addStepsAfterCurrentStep([CommentOnBug(), SetCommitQueueMinusFlagOnPatch()])
+                self.build.addStepsAfterCurrentStep([LeaveComment(), SetCommitQueueMinusFlagOnPatch()])
             else:
                 self.build.buildFinished([message], FAILURE)
         return rc
@@ -4173,9 +4425,9 @@ class CreateLocalGITCommit(shell.ShellCommand):
             patch_id = self.getProperty('patch_id', '')
             message = self.failure_message or 'Failed to create git commit for Patch {}'.format(patch_id)
             if self.getProperty('buildername', '').lower() == 'commit-queue':
-                self.setProperty('bugzilla_comment_text', message.replace('Patch', 'Attachment'))
+                self.setProperty('comment_text', message.replace('Patch', 'Attachment'))
                 self.setProperty('build_finish_summary', message)
-                self.build.addStepsAfterCurrentStep([CommentOnBug(), SetCommitQueueMinusFlagOnPatch()])
+                self.build.addStepsAfterCurrentStep([LeaveComment(), SetCommitQueueMinusFlagOnPatch()])
             else:
                 self.build.buildFinished([message], FAILURE)
         return rc
@@ -4204,11 +4456,11 @@ class PushCommitToWebKitRepo(shell.ShellCommand):
             log_text = self.log_observer.getStdout() + self.log_observer.getStderr()
             svn_revision = self.svn_revision_from_commit_text(log_text)
             identifier = self.identifier_for_revision(svn_revision)
-            self.setProperty('bugzilla_comment_text', self.comment_text_for_bug(svn_revision, identifier))
+            self.setProperty('comment_text', self.comment_text_for_bug(svn_revision, identifier))
             commit_summary = 'Committed {}'.format(identifier)
             self.descriptionDone = commit_summary
             self.setProperty('build_summary', commit_summary)
-            self.build.addStepsAfterCurrentStep([CommentOnBug(), RemoveFlagsOnPatch(), CloseBug()])
+            self.build.addStepsAfterCurrentStep([LeaveComment(), RemoveFlagsOnPatch(), CloseBug()])
             self.addURL(identifier, self.url_for_identifier(identifier))
         else:
             retry_count = int(self.getProperty('retry_count', 0))
@@ -4217,9 +4469,9 @@ class PushCommitToWebKitRepo(shell.ShellCommand):
                 self.build.addStepsAfterCurrentStep([GitResetHard(), CheckOutSource(repourl='https://git.webkit.org/git/WebKit-https'), ShowIdentifier(), UpdateWorkingDirectory(), ApplyPatch(), CreateLocalGITCommit(), PushCommitToWebKitRepo()])
                 return rc
 
-            self.setProperty('bugzilla_comment_text', self.comment_text_for_bug())
+            self.setProperty('comment_text', self.comment_text_for_bug())
             self.setProperty('build_finish_summary', 'Failed to commit to WebKit repository')
-            self.build.addStepsAfterCurrentStep([CommentOnBug(), SetCommitQueueMinusFlagOnPatch()])
+            self.build.addStepsAfterCurrentStep([LeaveComment(), SetCommitQueueMinusFlagOnPatch()])
         return rc
 
     def url_for_revision_details(self, revision):
@@ -4330,3 +4582,44 @@ class VerifyGitHubIntegrity(shell.ShellCommand):
             send_email_to_github_admin(email_subject, email_text)
         except Exception as e:
             print('Error in sending email for github issue: {}'.format(e))
+
+
+class ValidateSquashed(shell.ShellCommand):
+    name = 'validate-squashed'
+    haltOnFailure = True
+
+    def __init__(self, **kwargs):
+        super(ValidateSquashed, self).__init__(logEnviron=False, **kwargs)
+
+    def start(self, BufferLogObserverClass=logobserver.BufferLogObserver):
+        base_ref = self.getProperty('github.base.ref', DEFAULT_BRANCH)
+        head_ref = self.getProperty('github.head.ref', DEFAULT_BRANCH)
+        self.command = ['git', 'log', '--oneline', head_ref, f'^{base_ref}', '--max-count=2']
+
+        self.log_observer = BufferLogObserverClass(wantStderr=True)
+        self.addLogObserver('stdio', self.log_observer)
+
+        return shell.ShellCommand.start(self)
+
+    def getResultSummary(self):
+        if self.results == SKIPPED:
+            return {'step': 'Patches are always squashed'}
+        elif self.results == SUCCESS:
+            return {'step': 'Verified branch is squashed'}
+        return {'step': 'Can only land squashed branches'}
+
+    def evaluateCommand(self, cmd):
+        rc = shell.ShellCommand.evaluateCommand(self, cmd)
+        if rc != SUCCESS:
+            return rc
+
+        log_text = self.log_observer.getStdout()
+        if len(log_text.splitlines()) == 1:
+            return SUCCESS
+        return FAILURE
+
+    def doStepIf(self, step):
+        return self.getProperty('github.number')
+
+    def hideStepIf(self, results, step):
+        return not self.doStepIf(step)

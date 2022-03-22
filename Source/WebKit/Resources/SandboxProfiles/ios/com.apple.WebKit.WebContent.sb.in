@@ -1028,7 +1028,7 @@
     (home-subpath "/Library/Preferences/")
     (with no-log))
 
-(deny mach-lookup (with telemetry)
+(deny mach-lookup (with no-log) (with telemetry)
     (global-name "com.apple.containermanagerd")
 )
 
@@ -1085,10 +1085,12 @@
             "com.apple.iphone.axserver-systemwide"
             "com.apple.mobileassetd.v2"
             "com.apple.mobilegestalt.xpc"
+#if !ENABLE(CONTENT_FILTERING_IN_NETWORKING_PROCESS)
             "com.apple.nehelper"
             "com.apple.nesessionmanager.content-filter"
-            "com.apple.tccd"
             "com.apple.uikit.viewservice.com.apple.WebContentFilter.remoteUI"
+#endif
+            "com.apple.tccd"
             "com.apple.webinspector"
 )))
 
@@ -1278,6 +1280,9 @@
         SYS_setrlimit
         SYS_sigaltstack
         SYS_sigprocmask
+#if PLATFORM(WATCHOS)
+        SYS_sigreturn
+#endif
         SYS_socket
         SYS_thread_selfusage
         SYS_unlink
@@ -1631,7 +1636,7 @@
     )
 )
 
-(deny darwin-notification-post (with telemetry))
+(deny darwin-notification-post (with no-log) (with telemetry))
 (allow darwin-notification-post
     (notification-name
         "_AXNotification_AXSClassicInvertColorsPreference"

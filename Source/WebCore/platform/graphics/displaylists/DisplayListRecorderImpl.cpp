@@ -104,9 +104,9 @@ void RecorderImpl::recordSetStrokeThickness(float thickness)
     append<SetStrokeThickness>(thickness);
 }
 
-void RecorderImpl::recordSetState(const GraphicsContextState& state, GraphicsContextState::StateChangeFlags changeFlags)
+void RecorderImpl::recordSetState(const GraphicsContextState& state)
 {
-    append<SetState>(state, changeFlags);
+    append<SetState>(state);
 }
 
 void RecorderImpl::recordSetLineCap(LineCap lineCap)
@@ -180,6 +180,11 @@ void RecorderImpl::recordDrawImageBuffer(ImageBuffer& imageBuffer, const FloatRe
 void RecorderImpl::recordDrawNativeImage(RenderingResourceIdentifier imageIdentifier, const FloatSize& imageSize, const FloatRect& destRect, const FloatRect& srcRect, const ImagePaintingOptions& options)
 {
     append<DrawNativeImage>(imageIdentifier, imageSize, destRect, srcRect, options);
+}
+
+void RecorderImpl::recordDrawSystemImage(SystemImage& systemImage, const FloatRect& destinationRect)
+{
+    append<DrawSystemImage>(systemImage, destinationRect);
 }
 
 void RecorderImpl::recordDrawPattern(RenderingResourceIdentifier imageIdentifier, const FloatRect& destRect, const FloatRect& tileRect, const AffineTransform& transform, const FloatPoint& phase, const FloatSize& spacing, const ImagePaintingOptions& options)

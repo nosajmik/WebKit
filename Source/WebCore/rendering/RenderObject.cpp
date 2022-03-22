@@ -491,11 +491,6 @@ RenderBox* RenderObject::enclosingScrollableContainerForSnapping() const
     return document().documentElement() ? document().documentElement()->renderBox() : nullptr;
 }
 
-RenderBlock* RenderObject::firstLineBlock() const
-{
-    return nullptr;
-}
-
 static inline bool objectIsRelayoutBoundary(const RenderElement* object)
 {
     // FIXME: In future it may be possible to broaden these conditions in order to improve performance.
@@ -2606,6 +2601,11 @@ bool WebCore::shouldApplyLayoutContainment(const WebCore::RenderObject& renderer
 bool WebCore::shouldApplySizeContainment(const WebCore::RenderObject& renderer)
 {
     return renderer.style().containsSize() && (!renderer.isInline() || renderer.isAtomicInlineLevelBox()) && !renderer.isRubyText() && (!renderer.isTablePart() || renderer.isTableCaption()) && !renderer.isTable();
+}
+
+bool WebCore::shouldApplyInlineSizeContainment(const WebCore::RenderObject& renderer)
+{
+    return renderer.style().effectiveContainment().contains(Containment::InlineSize) && (!renderer.isInline() || renderer.isAtomicInlineLevelBox()) && !renderer.isRubyText() && (!renderer.isTablePart() || renderer.isTableCaption()) && !renderer.isTable();
 }
 
 bool WebCore::shouldApplyStyleContainment(const WebCore::RenderObject& renderer)

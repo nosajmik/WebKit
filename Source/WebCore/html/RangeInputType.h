@@ -52,12 +52,12 @@ private:
     void handleMouseDownEvent(MouseEvent&) final;
     ShouldCallBaseEventHandler handleKeydownEvent(KeyboardEvent&) final;
     RenderPtr<RenderElement> createInputRenderer(RenderStyle&&) final;
-    void createShadowSubtreeAndUpdateInnerTextElementEditability(bool) final;
+    void createShadowSubtree() final;
     Decimal parseToNumber(const String&, const Decimal&) const final;
     String serialize(const Decimal&) const final;
     bool accessKeyAction(bool sendMouseEvents) final;
     void attributeChanged(const QualifiedName&) final;
-    void setValue(const String&, bool valueChanged, TextFieldEventBehavior) final;
+    void setValue(const String&, bool valueChanged, TextFieldEventBehavior, TextControlSetValueSelection) final;
     String fallbackValue() const final;
     String sanitizeValue(const String& proposedValue) const final;
     bool shouldRespectListAttribute() final;

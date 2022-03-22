@@ -2458,11 +2458,9 @@ void Element::addShadowRoot(Ref<ShadowRoot>&& newShadowRoot)
         shadowRoot.setHost(*this);
         shadowRoot.setParentTreeScope(treeScope());
 
-#if ASSERT_ENABLED
-        ASSERT(notifyChildNodeInserted(*this, shadowRoot).isEmpty());
-#else
-        notifyChildNodeInserted(*this, shadowRoot);
-#endif
+        NodeVector postInsertionNotificationTargets;
+        notifyChildNodeInserted(*this, shadowRoot, postInsertionNotificationTargets);
+        ASSERT_UNUSED(postInsertionNotificationTargets, postInsertionNotificationTargets.isEmpty());
 
         InspectorInstrumentation::didPushShadowRoot(*this, shadowRoot);
 
@@ -3073,7 +3071,7 @@ void Element::focus(const FocusOptions& options)
     Ref document { this->document() };
     if (document->focusedElement() == this) {
         if (document->page())
-            document->page()->chrome().client().elementDidRefocus(*this);
+            document->page()->chrome().client().elementDidRefocus(*this, options);
         return;
     }
 
@@ -3091,7 +3089,7 @@ void Element::focus(const FocusOptions& options)
         RefPtr currentlyFocusedElement = document->focusedElement();
         if (root->containsIncludingShadowDOM(currentlyFocusedElement.get())) {
             if (document->page())
-                document->page()->chrome().client().elementDidRefocus(*currentlyFocusedElement);
+                document->page()->chrome().client().elementDidRefocus(*currentlyFocusedElement, options);
             return;
         }
 
@@ -3208,10 +3206,10 @@ void Element::dispatchFocusOutEventIfNeeded(RefPtr<Element>&& newFocusedElement)
     dispatchScopedEvent(FocusEvent::create(eventNames().focusoutEvent, Event::CanBubble::Yes, Event::IsCancelable::No, document().windowProxy(), 0, WTFMove(newFocusedElement)));
 }
 
-void Element::dispatchFocusEvent(RefPtr<Element>&& oldFocusedElement, FocusDirection)
+void Element::dispatchFocusEvent(RefPtr<Element>&& oldFocusedElement, const FocusOptions& options)
 {
     if (auto* page = document().page())
-        page->chrome().client().elementDidFocus(*this);
+        page->chrome().client().elementDidFocus(*this, options);
     dispatchEvent(FocusEvent::create(eventNames().focusEvent, Event::CanBubble::No, Event::IsCancelable::No, document().windowProxy(), 0, WTFMove(oldFocusedElement)));
 }
 
@@ -3253,7 +3251,10 @@ bool Element::dispatchMouseForceWillBegin()
 void Element::enqueueSecurityPolicyViolationEvent(SecurityPolicyViolationEventInit&& eventInit)
 {
     document().eventLoop().queueTask(TaskSource::DOMManipulation, [this, protectedThis = Ref { *this }, event = SecurityPolicyViolationEvent::create(eventNames().securitypolicyviolationEvent, WTFMove(eventInit), Event::IsTrusted::Yes)] {
-        dispatchEvent(event);
+        if (!isConnected())
+            document().dispatchEvent(event);
+        else
+            dispatchEvent(event);
     });
 }
 
@@ -3441,6 +3442,16 @@ void Element::removeFromTopLayer()
     forEachRenderLayer(*this, [](RenderLayer& layer) {
         layer.establishesTopLayerWillChange();
     });
+
+    // We need to call Styleable::fromRenderer() while this element is still contained in
+    // Document::topLayerElements(), since Styleable::fromRenderer() relies on this to
+    // find the backdrop's associated element.
+    if (auto* renderer = this->renderer()) {
+        if (auto backdrop = renderer->backdropRenderer()) {
+            if (auto styleable = Styleable::fromRenderer(*backdrop))
+                styleable->cancelDeclarativeAnimations();
+        }
+    }
 
     document().removeTopLayerElement(*this);
     clearNodeFlag(NodeFlag::IsInTopLayer);
@@ -4049,6 +4060,8 @@ CSSAnimationCollection& Element::animationsCreatedByMarkup(PseudoId pseudoId)
 
 void Element::setAnimationsCreatedByMarkup(PseudoId pseudoId, CSSAnimationCollection&& animations)
 {
+    if (animations.isEmpty() && !animationRareData(pseudoId))
+        return;
     ensureAnimationRareData(pseudoId).setAnimationsCreatedByMarkup(WTFMove(animations));
 }
 
@@ -4637,7 +4650,7 @@ ExceptionOr<void> Element::insertAdjacentHTML(const String& where, const String&
     if (UNLIKELY(addedNodes)) {
         // Must be called before insertAdjacent, as otherwise the children of fragment will be moved
         // to their new parent and will be harder to keep track of.
-        *addedNodes = collectChildNodes(fragment.returnValue());
+        collectChildNodes(fragment.returnValue(), *addedNodes);
     }
 
     // Step 4.
@@ -4685,6 +4698,7 @@ Element* Element::findAnchorElementForLink(String& outAnchorName)
 ExceptionOr<Ref<WebAnimation>> Element::animate(JSC::JSGlobalObject& lexicalGlobalObject, JSC::Strong<JSC::JSObject>&& keyframes, std::optional<std::variant<double, KeyframeAnimationOptions>>&& options)
 {
     String id = "";
+    std::optional<RefPtr<AnimationTimeline>> timeline;
     std::variant<FramesPerSecond, AnimationFrameRatePreset> frameRate = AnimationFrameRatePreset::Auto;
     std::optional<std::variant<double, KeyframeEffectOptions>> keyframeEffectOptions;
     if (options) {
@@ -4696,6 +4710,7 @@ ExceptionOr<Ref<WebAnimation>> Element::animate(JSC::JSGlobalObject& lexicalGlob
             auto keyframeEffectOptions = std::get<KeyframeAnimationOptions>(optionsValue);
             id = keyframeEffectOptions.id;
             frameRate = keyframeEffectOptions.frameRate;
+            timeline = keyframeEffectOptions.timeline;
             keyframeEffectOptionsVariant = WTFMove(keyframeEffectOptions);
         }
         keyframeEffectOptions = keyframeEffectOptionsVariant;
@@ -4707,6 +4722,8 @@ ExceptionOr<Ref<WebAnimation>> Element::animate(JSC::JSGlobalObject& lexicalGlob
 
     auto animation = WebAnimation::create(document(), &keyframeEffectResult.returnValue().get());
     animation->setId(id);
+    if (timeline)
+        animation->setTimeline(timeline->get());
     animation->setBindingsFrameRate(WTFMove(frameRate));
 
     auto animationPlayResult = animation->play();
@@ -4728,8 +4745,11 @@ Vector<RefPtr<WebAnimation>> Element::getAnimations(std::optional<GetAnimationsO
     }
 
     // For the list of animations to be current, we need to account for any pending CSS changes,
-    // such as updates to CSS Animations and CSS Transitions.
+    // such as updates to CSS Animations and CSS Transitions. This requires updating layout as
+    // well since resolving layout-dependent media queries could yield animations.
     // FIXME: We might be able to use ComputedStyleExtractor which is more optimized.
+    if (RefPtr owner = document().ownerElement())
+        owner->document().updateLayout();
     document().updateStyleIfNeeded();
 
     Vector<RefPtr<WebAnimation>> animations;

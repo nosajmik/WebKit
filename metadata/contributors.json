@@ -751,6 +751,15 @@
    },
    {
       "emails" : [
+         "anjalik_22@apple.com"
+      ],
+      "name" : "Anjali Kumar",
+      "nicks" : [
+         "anjalik"
+      ]
+   },
+   {
+      "emails" : [
          "annacc@chromium.org"
       ],
       "name" : "Anna Cavender",
@@ -994,7 +1003,7 @@
       "nicks" : [
          "basuke"
       ],
-      "status" : "committer"
+      "status" : "reviewer"
    },
    {
       "emails" : [
@@ -1659,6 +1668,16 @@
          "mitzpettel"
       ],
       "status" : "reviewer"
+   },
+   {
+      "emails" : [
+         "djg@apple.com"
+      ],
+      "github" : "djg",
+      "name" : "Dan Glastonbury",
+      "nicks" : [
+         "djg"
+      ]
    },
    {
       "emails" : [
@@ -2575,6 +2594,16 @@
       "nicks" : [
          "rgabor"
       ]
+   },
+   {
+      "emails" : [
+         "gnavamarino@apple.com"
+      ],
+      "name" : "Gabriel Nava Marino",
+      "nicks" : [
+         "gnavamarino"
+      ],
+      "status" : "committer"
    },
    {
       "emails" : [
@@ -4693,6 +4722,17 @@
       "name" : "Matt Woodrow",
       "nicks" : [
          "mattwoodrow"
+      ],
+      "status" : "committer"
+   },
+   {
+      "emails" : [
+         "Matteo_flores@apple.com"
+      ],
+      "github" : "Smackteo",
+      "name" : "Matteo Flores",
+      "nicks" : [
+         "MatteoF"
       ],
       "status" : "committer"
    },

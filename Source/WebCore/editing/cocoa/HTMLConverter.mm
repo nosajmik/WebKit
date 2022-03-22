@@ -641,7 +641,7 @@ String HTMLConverterCaches::propertyValueForNode(Node& node, CSSPropertyID prope
             return "bolder";
         inherit = true;
         break;
-    case CSSPropertyTextDecoration:
+    case CSSPropertyTextDecorationLine:
         if (element.hasTagName(uTag) || element.hasTagName(insTag))
             return "underline";
         else if (element.hasTagName(sTag) || element.hasTagName(strikeTag) || element.hasTagName(delTag))
@@ -1037,7 +1037,7 @@ NSDictionary *HTMLConverter::computedAttributesForElement(Element& element)
             [attrs setObject:@0 forKey:NSLigatureAttributeName];  // explicitly disabled
     }
 
-    String textDecoration = _caches->propertyValueForNode(element, CSSPropertyTextDecoration);
+    String textDecoration = _caches->propertyValueForNode(element, CSSPropertyTextDecorationLine);
     if (textDecoration.length()) {
         if (textDecoration.contains("underline"))
             [attrs setObject:[NSNumber numberWithInteger:NSUnderlineStyleSingle] forKey:NSUnderlineStyleAttributeName];
@@ -1319,7 +1319,9 @@ BOOL HTMLConverter::_addAttachmentForElement(Element& element, NSURL *url, BOOL 
         NSRange rangeToReplace = NSMakeRange(textLength, 0);
         NSDictionary *attrs;
         if (fileWrapper) {
-#if !PLATFORM(IOS_FAMILY)
+#if PLATFORM(IOS_FAMILY)
+            UNUSED_VARIABLE(ignoreOrientation);
+#else
             if (ignoreOrientation)
                 [attachment setIgnoresOrientation:YES];
 #endif

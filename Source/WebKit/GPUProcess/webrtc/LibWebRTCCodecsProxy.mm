@@ -39,8 +39,7 @@
 #import "WebCoreArgumentCoders.h"
 #import <WebCore/CVUtilities.h>
 #import <WebCore/LibWebRTCProvider.h>
-#import <WebCore/MediaSampleAVFObjC.h>
-#import <WebCore/RemoteVideoSample.h>
+#import <WebCore/VideoFrameCV.h>
 #import <webrtc/sdk/WebKit/WebKitDecoder.h>
 #import <webrtc/sdk/WebKit/WebKitEncoder.h>
 #import <wtf/BlockPtr.h>
@@ -98,20 +97,15 @@ auto LibWebRTCCodecsProxy::createDecoderCallback(RTCDecoderIdentifier identifier
     if (useRemoteFrames)
         videoFrameObjectHeap = m_videoFrameObjectHeap.ptr();
     return [identifier, connection = m_connection, resourceOwner = m_resourceOwner, videoFrameObjectHeap = WTFMove(videoFrameObjectHeap)] (CVPixelBufferRef pixelBuffer, uint32_t timeStampNs, uint32_t timeStamp) mutable {
-        auto sample = WebCore::MediaSampleAVFObjC::createImageSample(pixelBuffer, WebCore::MediaSample::VideoRotation::None, false, MediaTime(timeStampNs, 1), { });
-        if (!sample)
-            return;
+        auto videoFrame = WebCore::VideoFrameCV::create(MediaTime(timeStampNs, 1), false, WebCore::VideoFrame::Rotation::None, pixelBuffer);
         if (resourceOwner)
-            sample->setOwnershipIdentity(resourceOwner);
+            videoFrame->setOwnershipIdentity(resourceOwner);
         if (videoFrameObjectHeap) {
-            auto properties = videoFrameObjectHeap->add(sample.releaseNonNull());
-            connection->send(Messages::LibWebRTCCodecs::CompletedDecoding { identifier, timeStamp, WTFMove(properties) }, 0);
+            auto properties = videoFrameObjectHeap->add(WTFMove(videoFrame));
+            connection->send(Messages::LibWebRTCCodecs::CompletedDecoding { identifier, timeStamp, timeStampNs, WTFMove(properties) }, 0);
             return;
         }
-        auto remoteSample = WebCore::RemoteVideoSample::create(*sample);
-        if (!remoteSample)
-            return;
-        connection->send(Messages::LibWebRTCCodecs::CompletedDecodingCV { identifier, timeStamp, *remoteSample }, 0);
+        connection->send(Messages::LibWebRTCCodecs::CompletedDecodingCV { identifier, timeStamp, timeStampNs, pixelBuffer }, 0);
     };
 }
 
@@ -185,7 +179,7 @@ void LibWebRTCCodecsProxy::createEncoder(RTCEncoderIdentifier identifier, const 
         connection->send(Messages::LibWebRTCCodecs::CompletedEncoding { identifier, IPC::DataReference { buffer, size }, info }, 0);
     }).get());
     webrtc::setLocalEncoderLowLatency(encoder, useLowLatency);
-    auto result = m_encoders.add(identifier, Encoder { encoder, nullptr });
+    auto result = m_encoders.add(identifier, Encoder { encoder, makeUnique<SharedVideoFrameReader>(Ref { m_videoFrameObjectHeap }, m_resourceOwner) });
     ASSERT_UNUSED(result, result.isNewEntry || isTestingIPC());
     m_hasEncodersOrDecoders = true;
 }
@@ -221,55 +215,40 @@ LibWebRTCCodecsProxy::Encoder* LibWebRTCCodecsProxy::findEncoder(RTCEncoderIdent
     return &iterator->value;
 }
 
-static inline webrtc::VideoRotation toWebRTCVideoRotation(WebCore::MediaSample::VideoRotation rotation)
+static inline webrtc::VideoRotation toWebRTCVideoRotation(WebCore::VideoFrame::Rotation rotation)
 {
     switch (rotation) {
-    case WebCore::MediaSample::VideoRotation::None:
+    case WebCore::VideoFrame::Rotation::None:
         return webrtc::kVideoRotation_0;
-    case WebCore::MediaSample::VideoRotation::UpsideDown:
+    case WebCore::VideoFrame::Rotation::UpsideDown:
         return webrtc::kVideoRotation_180;
-    case WebCore::MediaSample::VideoRotation::Right:
+    case WebCore::VideoFrame::Rotation::Right:
         return webrtc::kVideoRotation_90;
-    case WebCore::MediaSample::VideoRotation::Left:
+    case WebCore::VideoFrame::Rotation::Left:
         return webrtc::kVideoRotation_270;
     }
     ASSERT_NOT_REACHED();
     return webrtc::kVideoRotation_0;
 }
 
-void LibWebRTCCodecsProxy::encodeFrame(RTCEncoderIdentifier identifier, WebCore::RemoteVideoSample&& sample, uint32_t timeStamp, bool shouldEncodeAsKeyFrame, std::optional<RemoteVideoFrameReadReference> sampleReference)
+void LibWebRTCCodecsProxy::encodeFrame(RTCEncoderIdentifier identifier, SharedVideoFrame&& sharedVideoFrame, uint32_t timeStamp, bool shouldEncodeAsKeyFrame)
 {
     assertIsCurrent(workQueue());
-    RetainPtr<CVPixelBufferRef> pixelBuffer;
-    if (sampleReference) {
-        auto sample = m_videoFrameObjectHeap->get(WTFMove(*sampleReference));
-        if (!sample)
-            return;
-
-        auto platformSample = sample->platformSample();
-        ASSERT(platformSample.type == WebCore::PlatformSample::CMSampleBufferType);
-        pixelBuffer = static_cast<CVPixelBufferRef>(PAL::CMSampleBufferGetImageBuffer(platformSample.sample.cmSampleBuffer));
-    }
-
     auto* encoder = findEncoder(identifier);
     if (!encoder) {
         ASSERT_IS_TESTING_IPC();
+        // Make sure to read RemoteVideoFrameReadReference to prevent memory leaks.
+        if (std::holds_alternative<RemoteVideoFrameReadReference>(sharedVideoFrame.buffer))
+            m_videoFrameObjectHeap->get(WTFMove(std::get<RemoteVideoFrameReadReference>(sharedVideoFrame.buffer)));
         return;
     }
 
+    auto pixelBuffer = encoder->frameReader->readBuffer(WTFMove(sharedVideoFrame.buffer));
+    if (!pixelBuffer)
+        return;
+
 #if !PLATFORM(MACCATALYST)
-    if (!pixelBuffer) {
-        if (sample.surface()) {
-            if (auto buffer = WebCore::createCVPixelBuffer(sample.surface()))
-                pixelBuffer = WTFMove(*buffer);
-        } else if (encoder->frameReader)
-            pixelBuffer = encoder->frameReader->read();
-
-        if (!pixelBuffer)
-            return;
-    }
-
-    webrtc::encodeLocalEncoderFrame(encoder->webrtcEncoder, pixelBuffer.get(), sample.time().toTimeScale(1000000).timeValue(), timeStamp, toWebRTCVideoRotation(sample.rotation()), shouldEncodeAsKeyFrame);
+    webrtc::encodeLocalEncoderFrame(encoder->webrtcEncoder, pixelBuffer.get(), sharedVideoFrame.time.toTimeScale(1000000).timeValue(), timeStamp, toWebRTCVideoRotation(sharedVideoFrame.rotation), shouldEncodeAsKeyFrame);
 #endif
 }
 
@@ -294,8 +273,6 @@ void LibWebRTCCodecsProxy::setSharedVideoFrameSemaphore(RTCEncoderIdentifier ide
         return;
     }
 
-    if (!encoder->frameReader)
-        encoder->frameReader = makeUnique<SharedVideoFrameReader>(Ref { m_videoFrameObjectHeap }, m_resourceOwner);
     encoder->frameReader->setSemaphore(WTFMove(semaphore));
 }
 
@@ -308,8 +285,6 @@ void LibWebRTCCodecsProxy::setSharedVideoFrameMemory(RTCEncoderIdentifier identi
         return;
     }
 
-    if (!encoder->frameReader)
-        encoder->frameReader = makeUnique<SharedVideoFrameReader>(Ref { m_videoFrameObjectHeap }, m_resourceOwner);
     encoder->frameReader->setSharedMemory(ipcHandle);
 }
 

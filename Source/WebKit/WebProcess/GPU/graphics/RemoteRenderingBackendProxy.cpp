@@ -34,6 +34,7 @@
 #include "PlatformRemoteImageBufferProxy.h"
 #include "RemoteRenderingBackendMessages.h"
 #include "RemoteRenderingBackendProxyMessages.h"
+#include "SwapBuffersDisplayRequirement.h"
 #include "WebCoreArgumentCoders.h"
 #include "WebPage.h"
 #include "WebProcess.h"
@@ -266,7 +267,7 @@ void RemoteRenderingBackendProxy::releaseRemoteResource(RenderingResourceIdentif
     sendToStream(Messages::RemoteRenderingBackend::ReleaseRemoteResource(renderingResourceIdentifier));
 }
 
-auto RemoteRenderingBackendProxy::swapToValidFrontBuffer(const BufferSet& buffers) -> SwapBuffersResult
+auto RemoteRenderingBackendProxy::prepareBuffersForDisplay(const BufferSet& buffers, bool supportsPartialRepaint, bool hasEmptyDirtyRegion) -> SwapBuffersResult
 {
     auto bufferIdentifier = [](ImageBuffer* buffer) -> std::optional<RenderingResourceIdentifier> {
         if (!buffer)
@@ -299,12 +300,14 @@ auto RemoteRenderingBackendProxy::swapToValidFrontBuffer(const BufferSet& buffer
 
     BufferIdentifierSet swappedBufferSet;
     std::optional<ImageBufferBackendHandle> frontBufferHandle;
-    bool frontBufferWasEmpty = false;
+    auto displayRequirement = SwapBuffersDisplayRequirement::NeedsNoDisplay;
 
-    sendSyncToStream(Messages::RemoteRenderingBackend::SwapToValidFrontBuffer(bufferSet),
-        Messages::RemoteRenderingBackend::SwapToValidFrontBuffer::Reply(swappedBufferSet, frontBufferHandle, frontBufferWasEmpty));
+    sendSyncToStream(Messages::RemoteRenderingBackend::PrepareBuffersForDisplay(bufferSet, supportsPartialRepaint, hasEmptyDirtyRegion),
+        Messages::RemoteRenderingBackend::PrepareBuffersForDisplay::Reply(swappedBufferSet, frontBufferHandle, displayRequirement));
 
-    auto fetchBufferWithIdentifier = [&](std::optional<RenderingResourceIdentifier> identifier, std::optional<ImageBufferBackendHandle>&& handle = std::nullopt) -> RefPtr<ImageBuffer> {
+    LOG_WITH_STREAM(RemoteRenderingBufferVolatility, stream << "RemoteRenderingBackendProxy::prepareBuffersForDisplay swapped to " << swappedBufferSet.front << " " << swappedBufferSet.back << " " << swappedBufferSet.secondaryBack);
+
+    auto fetchBufferWithIdentifier = [&](std::optional<RenderingResourceIdentifier> identifier, std::optional<ImageBufferBackendHandle>&& handle = std::nullopt, bool isFrontBuffer = false) -> RefPtr<ImageBuffer> {
         if (!identifier)
             return nullptr;
 
@@ -319,47 +322,39 @@ auto RemoteRenderingBackendProxy::swapToValidFrontBuffer(const BufferSet& buffer
                     downcast<ImageBufferBackendHandleSharing>(*sharing).setBackendHandle(WTFMove(*handle));
             }
         }
+        
+        if (isFrontBuffer) {
+            // We know the GPU Process always sets the new front buffer to be non-volatile.
+            buffer->setVolatilityState(VolatilityState::NonVolatile);
+        }
 
         return buffer;
     };
 
     return {
         {
-            fetchBufferWithIdentifier(swappedBufferSet.front, WTFMove(frontBufferHandle)),
+            fetchBufferWithIdentifier(swappedBufferSet.front, WTFMove(frontBufferHandle), true),
             fetchBufferWithIdentifier(swappedBufferSet.back),
             fetchBufferWithIdentifier(swappedBufferSet.secondaryBack)
         },
-        frontBufferWasEmpty
+        displayRequirement
     };
 }
 
-VolatilityState RemoteRenderingBackendProxy::markSurfaceNonVolatile(RenderingResourceIdentifier identifier)
+void RemoteRenderingBackendProxy::markSurfacesVolatile(Vector<WebCore::RenderingResourceIdentifier>&& identifiers, CompletionHandler<void(bool)>&& completionHandler)
 {
-    LOG_WITH_STREAM(RemoteRenderingBufferVolatility, stream << "Web Process: RemoteRenderingBackendProxy::markSurfaceNonVolatile " << identifier);
+    Vector<WebCore::RenderingResourceIdentifier> markedVolatileBufferIdentifiers;
+    // FIXME: This could become async when webkit.org/b/235965 is fixed (but be careful with buffer volatility state).
+    sendSyncToStream(Messages::RemoteRenderingBackend::MarkSurfacesVolatile(identifiers), Messages::RemoteRenderingBackend::MarkSurfacesVolatile::Reply(markedVolatileBufferIdentifiers));
 
-    bool bufferWasEmpty;
-    std::optional<ImageBufferBackendHandle> backendHandle;
-    sendSyncToStream(Messages::RemoteRenderingBackend::MarkSurfaceNonVolatile(identifier), Messages::RemoteRenderingBackend::MarkSurfaceNonVolatile::Reply(backendHandle, bufferWasEmpty));
-
-    auto buffer = m_remoteResourceCacheProxy.cachedImageBuffer(identifier);
-    if (backendHandle && buffer) {
-        if (auto* backend = buffer->ensureBackendCreated()) {
-            auto* sharing = backend->toBackendSharing();
-            if (is<ImageBufferBackendHandleSharing>(sharing))
-                downcast<ImageBufferBackendHandleSharing>(*sharing).setBackendHandle(WTFMove(*backendHandle));
-        }
+    for (auto identifier : markedVolatileBufferIdentifiers) {
+        auto imageBuffer = m_remoteResourceCacheProxy.cachedImageBuffer(identifier);
+        if (imageBuffer)
+            imageBuffer->setVolatilityState(WebCore::VolatilityState::Volatile);
     }
-
-    return bufferWasEmpty ? VolatilityState::Empty : VolatilityState::Valid;
-}
-
-void RemoteRenderingBackendProxy::markSurfacesVolatile(Vector<WebCore::RenderingResourceIdentifier>&& identifiers, CompletionHandler<void(Vector<WebCore::RenderingResourceIdentifier>&&)>&& completionHandler)
-{
-    Vector<WebCore::RenderingResourceIdentifier> inUseBufferIdentifiers;
-    // FIXME: This should become async when webkit.org/b/235965 is fixed.
-    sendSyncToStream(Messages::RemoteRenderingBackend::MarkSurfacesVolatile(identifiers), Messages::RemoteRenderingBackend::MarkSurfacesVolatile::Reply(inUseBufferIdentifiers));
-
-    completionHandler(WTFMove(inUseBufferIdentifiers));
+    
+    bool markedAllVolatile = identifiers.size() == markedVolatileBufferIdentifiers.size();
+    completionHandler(markedAllVolatile);
 }
 
 void RemoteRenderingBackendProxy::finalizeRenderingUpdate()

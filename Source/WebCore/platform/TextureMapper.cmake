@@ -24,6 +24,7 @@ list(APPEND WebCore_PRIVATE_FRAMEWORK_HEADERS
     platform/graphics/texmap/BitmapTexture.h
     platform/graphics/texmap/ClipStack.h
     platform/graphics/texmap/GraphicsContextGLTextureMapper.h
+    platform/graphics/texmap/GraphicsContextGLTextureMapperANGLE.h
     platform/graphics/texmap/GraphicsLayerTextureMapper.h
     platform/graphics/texmap/TextureMapper.h
     platform/graphics/texmap/TextureMapperBackingStore.h
@@ -48,6 +49,16 @@ if (USE_TEXTURE_MAPPER_GL)
         platform/graphics/texmap/TextureMapperContextAttributes.cpp
         platform/graphics/texmap/TextureMapperGL.cpp
         platform/graphics/texmap/TextureMapperShaderProgram.cpp
+    )
+endif ()
+
+if (USE_TEXTURE_MAPPER_DMABUF)
+    list(APPEND WebCore_SOURCES
+        platform/graphics/texmap/TextureMapperPlatformLayerProxyDMABuf.cpp
+    )
+
+    list(APPEND WebCore_PRIVATE_FRAMEWORK_HEADERS
+        platform/graphics/texmap/TextureMapperPlatformLayerProxyDMABuf.h
     )
 endif ()
 

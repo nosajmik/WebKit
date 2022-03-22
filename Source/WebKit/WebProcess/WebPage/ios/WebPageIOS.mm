@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2020 Apple Inc. All rights reserved.
+ * Copyright (C) 2012-2022 Apple Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -688,7 +688,7 @@ void WebPage::updateSelectionAppearance()
     if (!editor.hasComposition() && frame->selection().selection().isNone())
         return;
 
-    didChangeSelection();
+    didChangeSelection(frame.get());
 }
 
 static void dispatchSyntheticMouseMove(Frame& mainFrame, const WebCore::FloatPoint& location, OptionSet<WebEvent::Modifier> modifiers, WebCore::PointerID pointerId = WebCore::mousePointerID)
@@ -1260,17 +1260,6 @@ void WebPage::blurFocusedElement()
         return;
 
     m_focusedElement->blur();
-}
-
-void WebPage::setIsShowingInputViewForFocusedElement(bool showingInputView)
-{
-    if (m_isShowingInputViewForFocusedElement == showingInputView)
-        return;
-
-    m_isShowingInputViewForFocusedElement = showingInputView;
-
-    if (showingInputView)
-        preemptivelySendAutocorrectionContext();
 }
 
 void WebPage::setFocusedElementValue(const WebCore::ElementContext& context, const String& value)
@@ -2974,13 +2963,6 @@ static void elementPositionInformation(WebPage& page, Element& element, const In
         boundsPositionInformation(*renderer, info);
     }
 
-#if ENABLE(DATA_DETECTION)
-    if (info.isImageOverlayText && innerNonSharedNode->shadowHost() == &element && is<HTMLElement>(element)) {
-        if (Ref htmlElement = downcast<HTMLElement>(element); ImageOverlay::hasOverlay(htmlElement.get()))
-            dataDetectorImageOverlayPositionInformation(htmlElement.get(), request, info);
-    }
-#endif
-
     info.elementContext = page.contextForElement(element);
 }
     
@@ -3209,6 +3191,26 @@ InteractionInformationAtPosition WebPage::positionInformation(const InteractionI
             info.image = shareableBitmapSnapshotForNode(element);
     }
 
+#if ENABLE(DATA_DETECTION)
+    auto hitTestedImageOverlayHost = ([&]() -> RefPtr<HTMLElement> {
+        if (!hitTestNode || !info.isImageOverlayText)
+            return nullptr;
+
+        RefPtr shadowHost = hitTestNode->shadowHost();
+        if (!is<HTMLElement>(shadowHost.get()))
+            return nullptr;
+
+        RefPtr htmlElement = downcast<HTMLElement>(shadowHost.get());
+        if (!ImageOverlay::hasOverlay(*htmlElement))
+            return nullptr;
+
+        return htmlElement;
+    })();
+
+    if (hitTestedImageOverlayHost)
+        dataDetectorImageOverlayPositionInformation(*hitTestedImageOverlayHost, request, info);
+#endif // ENABLE(DATA_DETECTION)
+
     if (!info.isImage && request.includeImageData && hitTestNode) {
         if (auto video = hostVideoElementIgnoringImageOverlay(*hitTestNode))
             videoPositionInformation(*this, *video, request, info);
@@ -3250,8 +3252,10 @@ void WebPage::stopInteraction()
     m_interactionNode = nullptr;
 }
 
-void WebPage::performActionOnElement(uint32_t action)
+void WebPage::performActionOnElement(uint32_t action, const String& authorizationToken, CompletionHandler<void()>&& completionHandler)
 {
+    CompletionHandlerCallingScope callCompletionHandler(WTFMove(completionHandler));
+
     if (!is<HTMLElement>(m_interactionNode))
         return;
 
@@ -3277,7 +3281,7 @@ void WebPage::performActionOnElement(uint32_t action)
             m_interactionNode->document().editor().copyURL(element.document().completeURL(stripLeadingAndTrailingHTMLSpaces(element.attributeWithoutSynchronization(HTMLNames::hrefAttr))), element.textContent());
 #if ENABLE(ATTACHMENT_ELEMENT)
         else if (auto attachmentInfo = element.document().editor().promisedAttachmentInfo(element))
-            send(Messages::WebPageProxy::WritePromisedAttachmentToPasteboard(WTFMove(attachmentInfo)));
+            send(Messages::WebPageProxy::WritePromisedAttachmentToPasteboard(WTFMove(attachmentInfo), authorizationToken));
 #endif
     } else if (static_cast<SheetAction>(action) == SheetAction::SaveImage) {
         if (!is<RenderImage>(*element.renderer()))
@@ -3293,7 +3297,7 @@ void WebPage::performActionOnElement(uint32_t action)
             return;
         SharedMemory::Handle handle;
         sharedMemoryBuffer->createHandle(handle, SharedMemory::Protection::ReadOnly);
-        send(Messages::WebPageProxy::SaveImageToLibrary(SharedMemory::IPCHandle { WTFMove(handle), buffer->size() }));
+        send(Messages::WebPageProxy::SaveImageToLibrary(SharedMemory::IPCHandle { WTFMove(handle), buffer->size() }, authorizationToken));
     }
 }
 
@@ -4293,8 +4297,6 @@ void WebPage::cancelAsynchronousTouchEvents(Vector<std::pair<WebTouchEvent, Comp
 }
 #endif
 
-#if !HAVE(UIKIT_BACKGROUND_THREAD_PRINTING)
-
 void WebPage::computePagesForPrintingiOS(WebCore::FrameIdentifier frameID, const PrintInfo& printInfo, Messages::WebPage::ComputePagesForPrintingiOS::DelayedReply&& reply)
 {
     ASSERT_WITH_MESSAGE(!printInfo.snapshotFirstPage, "If we are just snapshotting the first page, we don't need a synchronous message to determine the page count, which is 1.");
@@ -4307,8 +4309,6 @@ void WebPage::computePagesForPrintingiOS(WebCore::FrameIdentifier frameID, const
     ASSERT(pageRects.size() >= 1);
     reply(pageRects.size());
 }
-
-#endif // !HAVE(UIKIT_BACKGROUND_THREAD_PRINTING)
 
 void WebPage::drawToPDFiOS(WebCore::FrameIdentifier frameID, const PrintInfo& printInfo, size_t pageCount, Messages::WebPage::DrawToPDFiOSAsyncReply&& reply)
 {

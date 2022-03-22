@@ -32,11 +32,13 @@
 #import "CocoaImage.h"
 #import "CompletionHandlerCallChecker.h"
 #import "DocumentEditingContext.h"
+#import "ImageAnalysisUtilities.h"
 #import "InputViewUpdateDeferrer.h"
 #import "InsertTextOptions.h"
 #import "Logging.h"
 #import "NativeWebKeyboardEvent.h"
 #import "NativeWebTouchEvent.h"
+#import "PageClient.h"
 #import "RemoteLayerTreeDrawingAreaProxy.h"
 #import "RemoteLayerTreeViews.h"
 #import "RemoteScrollingCoordinatorProxy.h"
@@ -45,7 +47,6 @@
 #import "TextChecker.h"
 #import "TextInputSPI.h"
 #import "TextRecognitionUpdateResult.h"
-#import "TextRecognitionUtilities.h"
 #import "UIKitSPI.h"
 #import "UserInterfaceIdiom.h"
 #import "WKActionSheetAssistant.h"
@@ -2389,6 +2390,9 @@ static NSValue *nsSizeForTapHighlightBorderRadius(WebCore::IntSize borderRadius,
 
 - (void)_zoomToRevealFocusedElement
 {
+    if (_focusedElementInformation.preventScroll)
+        return;
+
     if (_suppressSelectionAssistantReasons || _activeTextInteractionCount)
         return;
 
@@ -4235,19 +4239,7 @@ WEBCORE_COMMAND_FOR_WEBVIEW(pasteAndMatchStyle);
 
 - (void)_defineForWebView:(id)sender
 {
-#if !PLATFORM(MACCATALYST)
-    MCProfileConnection *connection = [PAL::getMCProfileConnectionClass() sharedConnection];
-    if ([connection effectiveBoolValueForSetting:PAL::get_ManagedConfiguration_MCFeatureDefinitionLookupAllowed()] == MCRestrictedBoolExplicitNo)
-        return;
-#endif
-
-    RetainPtr<WKContentView> view = self;
-    _page->getSelectionOrContentsAsString([view](const String& string) {
-        if (!string)
-            return;
-
-        [view _showDictionary:string];
-    });
+    [self _lookupForWebView:sender];
 }
 
 - (void)accessibilityRetrieveSpeakSelectionContent
@@ -4977,11 +4969,6 @@ static void selectionChangedWithTouch(WKContentView *view, const WebCore::IntPoi
     if (!useSyncRequest)
         return;
 
-    callOnMainRunLoop([weakSelf = WeakObjCPtr<WKContentView>(self)]() {
-        if (auto strongSelf = weakSelf.get())
-            strongSelf->_autocorrectionContextNeedsUpdate = YES;
-    });
-
     if (!_page->process().connection()->waitForAndDispatchImmediately<Messages::WebPageProxy::HandleAutocorrectionContext>(_page->webPageID(), 1_s, IPC::WaitForOption::DispatchIncomingSyncMessagesWhileWaiting))
         RELEASE_LOG(TextInput, "Timed out while waiting for autocorrection context.");
 
@@ -5654,6 +5641,47 @@ static WebKit::WritingDirection coreWritingDirection(NSWritingDirection directio
 {
     auto& editorState = _page->editorState();
     return !editorState.isMissingPostLayoutData && editorState.postLayoutData().hasPlainText;
+}
+
+- (void)addTextAlternatives:(NSTextAlternatives *)alternatives
+{
+    _page->addDictationAlternative({ alternatives, NSMakeRange(0, alternatives.primaryString.length) });
+}
+
+- (void)removeEmojiAlternatives
+{
+    _page->dictationAlternativesAtSelection([weakSelf = WeakObjCPtr<WKContentView>(self)](auto&& contexts) {
+        auto strongSelf = weakSelf.get();
+        if (!strongSelf || !strongSelf->_page)
+            return;
+
+        RefPtr page = strongSelf->_page;
+        Vector<WebCore::DictationContext> contextsToRemove;
+        for (auto context : contexts) {
+            auto alternatives = page->platformDictationAlternatives(context);
+            if (!alternatives)
+                continue;
+
+            auto originalAlternatives = alternatives.alternativeStrings;
+            auto nonEmojiAlternatives = [NSMutableArray arrayWithCapacity:originalAlternatives.count];
+            for (NSString *alternative in originalAlternatives) {
+                if (!alternative._containsEmojiOnly)
+                    [nonEmojiAlternatives addObject:alternative];
+            }
+
+            if (nonEmojiAlternatives.count == originalAlternatives.count)
+                continue;
+
+            RetainPtr<NSTextAlternatives> replacement;
+            if (nonEmojiAlternatives.count)
+                replacement = adoptNS([[NSTextAlternatives alloc] initWithPrimaryString:alternatives.primaryString alternativeStrings:nonEmojiAlternatives isLowConfidence:alternatives.isLowConfidence]);
+            else
+                contextsToRemove.append(context);
+
+            page->pageClient().replaceDictationAlternatives(replacement.get(), context);
+        }
+        page->clearDictationAlternatives(WTFMove(contextsToRemove));
+    });
 }
 
 // end of UITextInput protocol implementation
@@ -6827,6 +6855,7 @@ static RetainPtr<NSObject <WKFormPeripheral>> createInputPeripheralWithView(WebK
     _focusedElementInformation.shouldAvoidScrollingWhenFocusedContentIsVisible = false;
     _focusedElementInformation.shouldUseLegacySelectPopoverDismissalBehaviorInDataActivation = false;
     _focusedElementInformation.isFocusingWithValidationMessage = false;
+    _focusedElementInformation.preventScroll = false;
     _inputPeripheral = nil;
     _focusRequiresStrongPasswordAssistance = NO;
     _autocorrectionContextNeedsUpdate = YES;
@@ -10015,7 +10044,7 @@ static BOOL applicationIsKnownToIgnoreMouseEvents(const char* &warningVersion)
         return [UIPointerRegion regionWithRect:self.bounds identifier:editablePointerRegionIdentifier];
     }
 
-    return nil;
+    return [UIPointerRegion regionWithRect:self.bounds identifier:pointerRegionIdentifier];
 }
 
 - (UIPointerStyle *)pointerInteraction:(UIPointerInteraction *)interaction styleForRegion:(UIPointerRegion *)region
@@ -10040,24 +10069,21 @@ static BOOL applicationIsKnownToIgnoreMouseEvents(const char* &warningVersion)
 
     if (self.webView._editable) {
         if (_positionInformation.shouldNotUseIBeamInEditableContent)
-            return nil;
+            return [UIPointerStyle systemPointerStyle];
         return iBeamCursor();
     }
 
     if (_positionInformation.cursor && [region.identifier isEqual:pointerRegionIdentifier]) {
         WebCore::Cursor::Type cursorType = _positionInformation.cursor->type();
 
-        ALLOW_DEPRECATED_DECLARATIONS_BEGIN
         if (cursorType == WebCore::Cursor::Hand)
-            return [UIPointerStyle _systemPointerStyle];
-        ALLOW_DEPRECATED_DECLARATIONS_END
+            return [UIPointerStyle systemPointerStyle];
 
         if (cursorType == WebCore::Cursor::IBeam && _positionInformation.lineCaretExtent.contains(_positionInformation.request.point))
             return iBeamCursor();
     }
 
-    ASSERT_NOT_REACHED();
-    return nil;
+    return [UIPointerStyle systemPointerStyle];
 }
 
 #endif // HAVE(UI_POINTER_INTERACTION)
@@ -11000,8 +11026,8 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
 {
     _layerTreeTransactionIdAtLastInteractionStart = downcast<WebKit::RemoteLayerTreeDrawingAreaProxy>(*_page->drawingArea()).lastCommittedLayerTreeTransactionID();
     [self doAfterPositionInformationUpdate:[actionType, self, protectedSelf = retainPtr(self)] (WebKit::InteractionInformationAtPosition info) {
-        _WKElementAction *action = [_WKElementAction _elementActionWithType:actionType assistant:_actionSheetAssistant.get()];
         _WKActivatedElementInfo *elementInfo = [_WKActivatedElementInfo activatedElementInfoWithInteractionInformationAtPosition:info userInfo:nil];
+        _WKElementAction *action = [_WKElementAction _elementActionWithType:actionType info:elementInfo assistant:_actionSheetAssistant.get()];
         [action runActionWithElementInfo:elementInfo];
     } forRequest:WebKit::InteractionInformationRequest(WebCore::roundedIntPoint(location))];
 }
@@ -11107,12 +11133,19 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
 
 #if HAVE(LINK_PREVIEW)
     if ([userInterfaceItem isEqualToString:@"contextMenu"]) {
+        auto itemTitles = adoptNS([NSMutableArray<NSString *> new]);
+        [_contextMenuInteraction updateVisibleMenuWithBlock:[&itemTitles](UIMenu *menu) -> UIMenu * {
+            for (UIMenuElement *child in menu.children)
+                [itemTitles addObject:child.title];
+            return menu;
+        }];
         if (self._shouldUseContextMenus) {
             return @{ userInterfaceItem: @{
                 @"url": _positionInformation.url.isValid() ? WTF::userVisibleString(_positionInformation.url) : @"",
                 @"isLink": [NSNumber numberWithBool:_positionInformation.isLink],
                 @"isImage": [NSNumber numberWithBool:_positionInformation.isImage],
-                @"imageURL": _positionInformation.imageURL.isValid() ? WTF::userVisibleString(_positionInformation.imageURL) : @""
+                @"imageURL": _positionInformation.imageURL.isValid() ? WTF::userVisibleString(_positionInformation.imageURL) : @"",
+                @"items": itemTitles.get()
             } };
         }
         NSString *url = [_previewItemController previewData][UIPreviewDataLink];
@@ -11120,7 +11153,8 @@ ALLOW_DEPRECATED_IMPLEMENTATIONS_END
             @"url": url,
             @"isLink": [NSNumber numberWithBool:_positionInformation.isLink],
             @"isImage": [NSNumber numberWithBool:_positionInformation.isImage],
-            @"imageURL": _positionInformation.imageURL.isValid() ? WTF::userVisibleString(_positionInformation.imageURL) : @""
+            @"imageURL": _positionInformation.imageURL.isValid() ? WTF::userVisibleString(_positionInformation.imageURL) : @"",
+            @"items": itemTitles.get()
         } };
     }
 #endif
@@ -11448,8 +11482,6 @@ static UIMenu *menuFromLegacyPreviewOrDefaultActions(UIViewController *previewVi
             return;
         }
 
-        [strongSelf->_webView _didShowContextMenu];
-
         strongSelf->_showLinkPreviews = true;
         if (NSNumber *value = [[NSUserDefaults standardUserDefaults] objectForKey:webkitShowLinkPreviewsPreferenceKey])
             strongSelf->_showLinkPreviews = value.boolValue;
@@ -11719,6 +11751,7 @@ static UIMenu *menuFromLegacyPreviewOrDefaultActions(UIViewController *previewVi
         if (auto strongSelf = weakSelf.get()) {
             ASSERT_IMPLIES(strongSelf->_isDisplayingContextMenuWithAnimation, [strongSelf->_contextMenuHintContainerView window]);
             strongSelf->_isDisplayingContextMenuWithAnimation = NO;
+            [strongSelf->_webView _didShowContextMenu];
         }
     }];
 

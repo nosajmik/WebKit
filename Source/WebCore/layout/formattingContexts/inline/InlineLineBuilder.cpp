@@ -144,6 +144,8 @@ static inline bool isAtSoftWrapOpportunity(const InlineFormattingContext& inline
         // brings in unnecessary complexity.
         return true;
     }
+    if (current.layoutBox().isListMarker() || next.layoutBox().isListMarker())
+        return false;
     if (current.isBox() || next.isBox()) {
         auto isImageContent = current.layoutBox().isImage() || next.layoutBox().isImage();
         if (isImageContent && inlineFormattingContext.layoutState().inQuirksMode())
@@ -951,9 +953,14 @@ LineBuilder::Result LineBuilder::handleInlineContent(InlineContentBreaker& inlin
         if (lineCandidate.inlineContent.hasTrailingSoftWrapOpportunity() && m_line.hasContent()) {
             auto& trailingRun = candidateRuns.last();
             auto& trailingInlineItem = trailingRun.inlineItem;
+
             // Note that wrapping here could be driven both by the style of the parent and the inline item itself.
             // e.g inline boxes set the wrapping rules for their content and not for themselves.
-            auto& parentStyle = trailingInlineItem.layoutBox().parent().style();
+            auto& layoutBoxParent = trailingInlineItem.layoutBox().parent();
+
+            // Need to ensure we use the correct style here, so the content breaker and line builder remain in sync.
+            auto& parentStyle = isFirstLine() ? layoutBoxParent.firstLineStyle() : layoutBoxParent.style();
+
             auto isWrapOpportunity = TextUtil::isWrappingAllowed(parentStyle);
             if (!isWrapOpportunity && (trailingInlineItem.isInlineBoxStart() || trailingInlineItem.isInlineBoxEnd()))
                 isWrapOpportunity = TextUtil::isWrappingAllowed(trailingRun.style);

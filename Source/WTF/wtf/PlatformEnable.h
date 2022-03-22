@@ -843,14 +843,6 @@
 #define ENABLE_JIT_OPERATION_VALIDATION 1
 #endif
 
-#if CPU(ARM64) || (CPU(X86_64) && !OS(WINDOWS))
-/* The implementation of these thunks can use up to 6 argument registers, and
-   make use of ARM64 like features. For now, we'll only support them on platforms
-   that have 6 or more argument registers to use.
-*/
-#define ENABLE_EXTRA_CTI_THUNKS 1
-#endif
-
 #if !defined(ENABLE_BINDING_INTEGRITY) && !OS(WINDOWS)
 #define ENABLE_BINDING_INTEGRITY 1
 #endif
@@ -890,6 +882,10 @@
 #else
 #define ENABLE_SCROLLING_THREAD 0
 #endif
+#endif
+
+#if !defined(ENABLE_PDFJS) && (PLATFORM(COCOA) || PLATFORM(GTK) || PLATFORM(WPE))
+#define ENABLE_PDFJS 1
 #endif
 
 /* This feature works by embedding the OpcodeID in the 32 bit just before the generated LLint code

@@ -137,6 +137,7 @@ public:
     HTMLElement* containerElement() const;
     
     RefPtr<TextControlInnerTextElement> innerTextElement() const final;
+    RefPtr<TextControlInnerTextElement> innerTextElementCreatingShadowSubtreeIfNeeded() final;
     RenderStyle createInnerTextStyle(const RenderStyle&) final;
 
     HTMLElement* innerBlockElement() const;
@@ -170,7 +171,7 @@ public:
     WEBCORE_EXPORT void setType(const AtomString&);
 
     WEBCORE_EXPORT String value() const final;
-    WEBCORE_EXPORT ExceptionOr<void> setValue(const String&, TextFieldEventBehavior = DispatchNoEvent);
+    WEBCORE_EXPORT ExceptionOr<void> setValue(const String&, TextFieldEventBehavior = DispatchNoEvent, TextControlSetValueSelection = TextControlSetValueSelection::SetSelectionToEnd) final;
     WEBCORE_EXPORT void setValueForUser(const String&);
     // Checks if the specified string would be a valid value.
     // We should not call this for types with no string value such as CHECKBOX and RADIO.
@@ -343,18 +344,22 @@ public:
     bool shouldTruncateText(const RenderStyle&) const;
     void invalidateStyleOnFocusChangeIfNeeded();
 
-    std::optional<int> selectionStartForBindings() const;
-    ExceptionOr<void> setSelectionStartForBindings(std::optional<int>);
+    std::optional<unsigned> selectionStartForBindings() const;
+    ExceptionOr<void> setSelectionStartForBindings(std::optional<unsigned>);
 
-    std::optional<int> selectionEndForBindings() const;
-    ExceptionOr<void> setSelectionEndForBindings(std::optional<int>);
+    std::optional<unsigned> selectionEndForBindings() const;
+    ExceptionOr<void> setSelectionEndForBindings(std::optional<unsigned>);
 
     ExceptionOr<String> selectionDirectionForBindings() const;
     ExceptionOr<void> setSelectionDirectionForBindings(const String&);
 
-    ExceptionOr<void> setSelectionRangeForBindings(int start, int end, const String& direction);
+    ExceptionOr<void> setSelectionRangeForBindings(unsigned start, unsigned end, const String& direction);
 
     String resultForDialogSubmit() const final;
+
+    bool isInnerTextElementEditable() const final { return !hasAutoFillStrongPasswordButton() && HTMLTextFormControlElement::isInnerTextElementEditable(); }
+
+    void updateUserAgentShadowTree() final;
 
 protected:
     HTMLInputElement(const QualifiedName&, Document&, HTMLFormElement*, bool createdByParser);
@@ -371,8 +376,6 @@ private:
     void removedFromAncestor(RemovalType, ContainerNode&) final;
     void didMoveToNewDocument(Document& oldDocument, Document& newDocument) final;
 
-    void createShadowSubtreeAndUpdateInnerTextElementEditability();
-
     int defaultTabIndex() const final;
     bool hasCustomFocusLogic() const final;
     bool isKeyboardFocusable(KeyboardEvent*) const final;
@@ -383,8 +386,6 @@ private:
     bool shouldUseInputMethod() final;
 
     bool isInteractiveContent() const final;
-
-    bool isInnerTextElementEditable() const final { return !hasAutoFillStrongPasswordButton() && HTMLTextFormControlElement::isInnerTextElementEditable(); }
 
     bool canTriggerImplicitSubmission() const final { return isTextField(); }
 
@@ -495,6 +496,7 @@ private:
     bool m_hasTouchEventHandler : 1;
 #endif
     bool m_isSpellcheckDisabledExceptTextReplacement : 1;
+    bool m_hasPendingUserAgentShadowTreeUpdate : 1;
     RefPtr<InputType> m_inputType;
     // The ImageLoader must be owned by this element because the loader code assumes
     // that it lives as long as its owning element lives. If we move the loader into

@@ -542,6 +542,12 @@ imported/w3c/web-platform-tests/eventsource/eventsource-constructor-empty-url.an
 imported/w3c/web-platform-tests/eventsource/eventsource-constructor-url-bogus.any.serviceworker.html [ Skip ]
 imported/w3c/web-platform-tests/fetch/api/request/destination [ Skip ]
 imported/w3c/web-platform-tests/fetch/cross-origin-resource-policy [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/fetch-preflight.https.sub.any.worker.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/fetch-via-serviceworker--fallback.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/fetch-via-serviceworker--respondWith.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/serviceworker-accessors.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/serviceworker.https.sub.html
+imported/w3c/web-platform-tests/fetch/metadata/sharedworker.https.sub.html [ Skip ]
 imported/w3c/web-platform-tests/fetch/range/sw.https.window.html [ Skip ]
 imported/w3c/web-platform-tests/server-timing/service_worker_idl.html [ Skip ]
 imported/w3c/web-platform-tests/push-api [ Skip ]
@@ -752,6 +758,10 @@ css3/scroll-snap/scroll-padding-mainframe-paging.html [ Failure ]
 fast/scrolling/sync-scroll-overscroll-behavior-iframe.html [ Skip ]
 fast/scrolling/sync-scroll-overscroll-behavior-unscrollable-iframe.html [ Skip ]
 
+# Fetch tests that only timeout in WK1.
+imported/w3c/web-platform-tests/fetch/metadata/download.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/unload.https.sub.html [ Skip ]
+
 ### END OF (2) Failures without bug reports
 ########################################
 
@@ -848,7 +858,10 @@ editing/spelling/spellcheck-async.html [ Failure ]
 editing/spelling/spelling-unified-emulation.html [ Failure ]
 
 # Skip due to lack of DumpRenderTree `AccessibilityUIElement::stringDescriptionOfAttributeValue` implementation.
-accessibility/visible-character-range.html [ Skip ]
+accessibility/visible-character-range-basic.html [ Skip ]
+accessibility/visible-character-range-height-changes.html [ Skip ]
+accessibility/visible-character-range-scrolling.html [ Skip ]
+accessibility/visible-character-range-width-changes.html [ Skip ]
 accessibility/model-element-attributes.html [ Skip ]
 
 # <rdar://problem/26050923> The result is probably still a pass, but we don't have a way
@@ -1564,9 +1577,6 @@ webkit.org/b/223816 [ arm64 ] platform/mac/fast/objc/webScriptObject-hasWebScrip
 # rdar://80346975
 [ Debug ] media/track/track-in-band-cues-added-once.html [ Pass Failure Crash ]
 
-# rdar://80346516
-media/media-source/media-webm-vorbis-partial.html [ Skip ]
-
 # rdar://80343074 ([ Mac wk1 ] http/tests/websocket/tests/hybi/client-close-2.html [ Failure ])
 http/tests/websocket/tests/hybi/client-close-2.html [ Pass Failure ]
 
@@ -1692,8 +1702,6 @@ webkit.org/b/231102 [ BigSur ] printing/css2.1/page-break-after-000.html [ Pass 
 # webkit.org/b/214448 Web Share API is not implemented for mac-wk1
 http/tests/webshare/ [ Skip ]
 
-webkit.org/b/230729 [ Catalina Release ] imported/w3c/web-platform-tests/html/browsers/origin/cross-origin-objects/cross-origin-objects.html [ Pass Failure ]
-
 #WebGL Tests Timing Out on Catalina Debug WK1 EWS webkit.org/b/230774
 [ Catalina Debug ] webgl/1.0.3/conformance/canvas/drawingbuffer-static-canvas-test.html [ Pass Timeout ]
 [ Catalina Debug ] webgl/2.0.0/conformance/ogles/GL/inversesqrt/inversesqrt_001_to_006.html [ Pass Timeout ]
@@ -1792,3 +1800,5 @@ imported/w3c/web-platform-tests/pointerevents/pointerevent_element_haspointercap
 imported/w3c/web-platform-tests/pointerevents/pointerevent_mouse_capture_change_hover.html [ Pass Failure ]
 imported/w3c/web-platform-tests/pointerevents/pointerevent_mouse_pointercapture_in_frame.html [ Pass Failure ]
 imported/w3c/web-platform-tests/pointerevents/pointerevent_pointercapture-in-custom-element.html [ Pass Failure ]
+
+webkit.org/b/236128 imported/w3c/web-platform-tests/html/user-activation/activation-trigger-mouse-right.html [ Skip ]

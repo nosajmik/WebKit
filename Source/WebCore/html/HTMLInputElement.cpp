@@ -135,9 +135,10 @@ HTMLInputElement::HTMLInputElement(const QualifiedName& tagName, Document& docum
     , m_hasTouchEventHandler(false)
 #endif
     , m_isSpellcheckDisabledExceptTextReplacement(false)
+    , m_hasPendingUserAgentShadowTreeUpdate(false)
 {
-    // m_inputType is lazily created when constructed by the parser to avoid constructing unnecessarily a text inputType and
-    // its shadow subtree, just to destroy them when the |type| attribute gets set by the parser to something else than 'text'.
+    // m_inputType is lazily created when constructed by the parser to avoid constructing unnecessarily a text inputType,
+    // just to destroy them when the |type| attribute gets set by the parser to something else than 'text'.
     if (!createdByParser)
         m_inputType = InputType::createText(*this);
 
@@ -147,14 +148,7 @@ HTMLInputElement::HTMLInputElement(const QualifiedName& tagName, Document& docum
 
 Ref<HTMLInputElement> HTMLInputElement::create(const QualifiedName& tagName, Document& document, HTMLFormElement* form, bool createdByParser)
 {
-    bool shouldCreateShadowRootLazily = createdByParser;
-    Ref<HTMLInputElement> inputElement = adoptRef(*new HTMLInputElement(tagName, document, form, createdByParser));
-    if (!shouldCreateShadowRootLazily) {
-        ASSERT(inputElement->m_inputType->needsShadowSubtree());
-        inputElement->createUserAgentShadowRoot();
-        inputElement->createShadowSubtreeAndUpdateInnerTextElementEditability();
-    }
-    return inputElement;
+    return adoptRef(*new HTMLInputElement(tagName, document, form, createdByParser));
 }
 
 HTMLImageLoader& HTMLInputElement::ensureImageLoader()
@@ -162,12 +156,6 @@ HTMLImageLoader& HTMLInputElement::ensureImageLoader()
     if (!m_imageLoader)
         m_imageLoader = makeUnique<HTMLImageLoader>(*this);
     return *m_imageLoader;
-}
-
-void HTMLInputElement::createShadowSubtreeAndUpdateInnerTextElementEditability()
-{
-    Ref<InputType> protectedInputType(*m_inputType);
-    protectedInputType->createShadowSubtreeAndUpdateInnerTextElementEditability(isInnerTextElementEditable());
 }
 
 HTMLInputElement::~HTMLInputElement()
@@ -210,6 +198,11 @@ HTMLElement* HTMLInputElement::containerElement() const
 RefPtr<TextControlInnerTextElement> HTMLInputElement::innerTextElement() const
 {
     return m_inputType->innerTextElement();
+}
+
+RefPtr<TextControlInnerTextElement> HTMLInputElement::innerTextElementCreatingShadowSubtreeIfNeeded()
+{
+    return m_inputType->innerTextElementCreatingShadowSubtreeIfNeeded();
 }
 
 HTMLElement* HTMLInputElement::innerBlockElement() const
@@ -499,14 +492,14 @@ void HTMLInputElement::updateFocusAppearance(SelectionRestorationMode restoratio
 void HTMLInputElement::setDefaultSelectionAfterFocus(SelectionRestorationMode restorationMode, SelectionRevealMode revealMode)
 {
     ASSERT(isTextField());
-    int start = 0;
+    unsigned start = 0;
     auto direction = SelectionHasNoDirection;
     auto* frame = document().frame();
     if (frame && frame->editor().behavior().shouldMoveSelectionToEndWhenFocusingTextInput()) {
-        start = std::numeric_limits<int>::max();
+        start = std::numeric_limits<unsigned>::max();
         direction = SelectionHasForwardDirection;
     }
-    int end = restorationMode == SelectionRestorationMode::PlaceCaretAtStart ? start : std::numeric_limits<int>::max();
+    unsigned end = restorationMode == SelectionRestorationMode::PlaceCaretAtStart ? start : std::numeric_limits<unsigned>::max();
     setSelectionRange(start, end, direction, revealMode, Element::defaultFocusTextStateChangeIntent());
 }
 
@@ -580,10 +573,7 @@ void HTMLInputElement::updateType()
     m_inputType->detachFromElement();
 
     m_inputType = WTFMove(newType);
-    if (m_inputType->needsShadowSubtree()) {
-        ensureUserAgentShadowRoot();
-        createShadowSubtreeAndUpdateInnerTextElementEditability();
-    }
+    m_inputType->createShadowSubtreeIfNeeded();
 
     updateWillValidateAndValidity();
 
@@ -736,19 +726,12 @@ inline void HTMLInputElement::initializeInputType()
     const AtomString& type = attributeWithoutSynchronization(typeAttr);
     if (type.isNull()) {
         m_inputType = InputType::createText(*this);
-        ASSERT(m_inputType->needsShadowSubtree());
-        createUserAgentShadowRoot();
-        createShadowSubtreeAndUpdateInnerTextElementEditability();
         updateWillValidateAndValidity();
         return;
     }
 
     m_hasType = true;
     m_inputType = InputType::create(*this, type);
-    if (m_inputType->needsShadowSubtree()) {
-        createUserAgentShadowRoot();
-        createShadowSubtreeAndUpdateInnerTextElementEditability();
-    }
     updateWillValidateAndValidity();
     registerForSuspensionCallbackIfNeeded();
     runPostTypeUpdateTasks();
@@ -1081,7 +1064,7 @@ void HTMLInputElement::setValueForUser(const String& value)
     setValue(value, DispatchChangeEvent);
 }
 
-ExceptionOr<void> HTMLInputElement::setValue(const String& value, TextFieldEventBehavior eventBehavior)
+ExceptionOr<void> HTMLInputElement::setValue(const String& value, TextFieldEventBehavior eventBehavior, TextControlSetValueSelection selection)
 {
     if (isFileUpload() && !value.isEmpty())
         return Exception { InvalidStateError };
@@ -1096,11 +1079,16 @@ ExceptionOr<void> HTMLInputElement::setValue(const String& value, TextFieldEvent
 
     setLastChangeWasNotUserEdit();
     setFormControlValueMatchesRenderer(false);
-    m_inputType->setValue(sanitizedValue, valueChanged, eventBehavior);
+    m_inputType->setValue(sanitizedValue, valueChanged, eventBehavior, selection);
 
     bool wasModifiedProgrammatically = eventBehavior == DispatchNoEvent;
-    if (wasModifiedProgrammatically)
+    if (wasModifiedProgrammatically) {
         resignStrongPasswordAppearance();
+
+        if (m_isAutoFilledAndObscured)
+            setAutoFilledAndObscured(false);
+    }
+
     return { };
 }
 
@@ -1161,8 +1149,15 @@ void HTMLInputElement::setValueFromRenderer(const String& value)
 
     // We clear certain AutoFill flags here because this catches user edits.
     setAutoFilled(false);
-    if (m_isAutoFilledAndViewable && value.isEmpty())
+
+    if (!value.isEmpty())
+        return;
+
+    if (m_isAutoFilledAndViewable)
         setAutoFilledAndViewable(false);
+
+    if (m_isAutoFilledAndObscured)
+        setAutoFilledAndObscured(false);
 }
 
 void HTMLInputElement::willDispatchEvent(Event& event, InputElementClickState& state)
@@ -1591,7 +1586,19 @@ Node::InsertedIntoAncestorResult HTMLInputElement::insertedIntoAncestor(Insertio
 #endif
     if (isRadioButton())
         updateValidity();
+    if (insertionType.connectedToDocument && m_inputType->needsShadowSubtree() && !m_inputType->hasCreatedShadowSubtree() && !m_hasPendingUserAgentShadowTreeUpdate) {
+        document().addElementWithPendingUserAgentShadowTreeUpdate(*this);
+        m_hasPendingUserAgentShadowTreeUpdate = true;
+    }
     return InsertedIntoAncestorResult::NeedsPostInsertionCallback;
+}
+
+void HTMLInputElement::updateUserAgentShadowTree()
+{
+    ASSERT(m_hasPendingUserAgentShadowTreeUpdate);
+    document().removeElementWithPendingUserAgentShadowTreeUpdate(*this);
+    m_hasPendingUserAgentShadowTreeUpdate = false;
+    m_inputType->createShadowSubtreeIfNeeded();
 }
 
 void HTMLInputElement::didFinishInsertingNode()
@@ -1599,10 +1606,6 @@ void HTMLInputElement::didFinishInsertingNode()
     HTMLTextFormControlElement::didFinishInsertingNode();
     if (isInTreeScope() && !form())
         addToRadioButtonGroup();
-#if ENABLE(DATALIST_ELEMENT)
-    if (isConnected() && m_hasNonEmptyList)
-        dataListMayHaveChanged();
-#endif
 }
 
 void HTMLInputElement::removedFromAncestor(RemovalType removalType, ContainerNode& oldParentOfRemovedTree)
@@ -2078,7 +2081,7 @@ void HTMLInputElement::invalidateStyleOnFocusChangeIfNeeded()
         invalidateStyleForSubtreeInternal();
 }
 
-std::optional<int> HTMLInputElement::selectionStartForBindings() const
+std::optional<unsigned> HTMLInputElement::selectionStartForBindings() const
 {
     if (!canHaveSelection() || !m_inputType->supportsSelectionAPI())
         return std::nullopt;
@@ -2086,7 +2089,7 @@ std::optional<int> HTMLInputElement::selectionStartForBindings() const
     return selectionStart();
 }
 
-ExceptionOr<void> HTMLInputElement::setSelectionStartForBindings(std::optional<int> start)
+ExceptionOr<void> HTMLInputElement::setSelectionStartForBindings(std::optional<unsigned> start)
 {
     if (!canHaveSelection() || !m_inputType->supportsSelectionAPI())
         return Exception { InvalidStateError, "The input element's type ('" + m_inputType->formControlType() + "') does not support selection." };
@@ -2095,7 +2098,7 @@ ExceptionOr<void> HTMLInputElement::setSelectionStartForBindings(std::optional<i
     return { };
 }
 
-std::optional<int> HTMLInputElement::selectionEndForBindings() const
+std::optional<unsigned> HTMLInputElement::selectionEndForBindings() const
 {
     if (!canHaveSelection() || !m_inputType->supportsSelectionAPI())
         return std::nullopt;
@@ -2103,7 +2106,7 @@ std::optional<int> HTMLInputElement::selectionEndForBindings() const
     return selectionEnd();
 }
 
-ExceptionOr<void> HTMLInputElement::setSelectionEndForBindings(std::optional<int> end)
+ExceptionOr<void> HTMLInputElement::setSelectionEndForBindings(std::optional<unsigned> end)
 {
     if (!canHaveSelection() || !m_inputType->supportsSelectionAPI())
         return Exception { InvalidStateError, "The input element's type ('" + m_inputType->formControlType() + "') does not support selection." };
@@ -2129,7 +2132,7 @@ ExceptionOr<void> HTMLInputElement::setSelectionDirectionForBindings(const Strin
     return { };
 }
 
-ExceptionOr<void> HTMLInputElement::setSelectionRangeForBindings(int start, int end, const String& direction)
+ExceptionOr<void> HTMLInputElement::setSelectionRangeForBindings(unsigned start, unsigned end, const String& direction)
 {
     if (!canHaveSelection() || !m_inputType->supportsSelectionAPI())
         return Exception { InvalidStateError, "The input element's type ('" + m_inputType->formControlType() + "') does not support selection." };

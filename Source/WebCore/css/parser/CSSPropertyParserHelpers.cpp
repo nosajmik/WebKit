@@ -519,6 +519,12 @@ struct LengthRawKnownTokenTypeDimensionConsumer {
         case CSSUnitType::CSS_DVB:
         case CSSUnitType::CSS_DVI:
         case CSSUnitType::CSS_Q:
+        case CSSUnitType::CSS_CQW:
+        case CSSUnitType::CSS_CQH:
+        case CSSUnitType::CSS_CQI:
+        case CSSUnitType::CSS_CQB:
+        case CSSUnitType::CSS_CQMIN:
+        case CSSUnitType::CSS_CQMAX:
             break;
         default:
             return std::nullopt;
@@ -4285,8 +4291,6 @@ RefPtr<CSSPrimitiveValue> consumeSingleContainerName(CSSParserTokenRange& range)
         return nullptr;
     if (auto ident = consumeCustomIdent(range))
         return ident;
-    if (auto string = consumeString(range))
-        return string;
     return nullptr;
 }
 

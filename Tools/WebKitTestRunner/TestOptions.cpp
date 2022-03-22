@@ -97,9 +97,6 @@ const TestFeatures& TestOptions::defaults()
             { "InputTypeMonthEnabled", true },
             { "InputTypeTimeEnabled", true },
             { "InputTypeWeekEnabled", true },
-#if USE(ATSPI)
-            { "IsAccessibilityIsolatedTreeEnabled", true },
-#endif
             { "JavaScriptCanAccessClipboard", true },
             { "JavaScriptCanOpenWindowsAutomatically", true },
             { "LargeImageAsyncDecodingEnabled", false },
@@ -116,6 +113,7 @@ const TestFeatures& TestOptions::defaults()
             { "OffscreenCanvasEnabled", true },
             { "OffscreenCanvasInWorkersEnabled", true },
             { "PageVisibilityBasedProcessSuppressionEnabled", false },
+            { "PdfJSViewerEnabled", false },
             { "PluginsEnabled", true },
             { "RequiresUserGestureForAudioPlayback", false },
             { "RequiresUserGestureForMediaPlayback", false },
@@ -127,6 +125,7 @@ const TestFeatures& TestOptions::defaults()
             { "TextAutosizingUsesIdempotentMode", false },
             { "UsesBackForwardCache", false },
             { "WebAuthenticationEnabled", true },
+            { "WebGPU", true },
             { "WebRTCRemoteVideoFrameEnabled", true },
             { "WebRTCMDNSICECandidatesEnabled", false },
             { "XSSAuditorEnabled", false },

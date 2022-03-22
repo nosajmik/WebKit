@@ -267,7 +267,7 @@ class FlatpakObject:
         try:
             self.flatpak("remote-ls", remote, gather_output=True)
         except subprocess.CalledProcessError as error:
-            if error.output.lower().find("key expired"):
+            if error.output.lower().find(b"key expired"):
                 Console.message("WebKit SDK GPG key expired, synchronizing with remote")
                 with tempfile.NamedTemporaryFile() as tmpfile:
                     fd = urlopen(WEBKIT_SDK_GPG_PUBKEY_URL)
@@ -458,6 +458,13 @@ def disable_signals(signals=[signal.SIGINT, signal.SIGTERM, signal.SIGHUP]):
         signal.signal(disabled_signal, previous_handler)
 
 
+def extract_extra_command_args(args):
+    """Takes a list of unparsed args and splits them at '--' to pass to subprocesses."""
+    try:
+        return args[args.index('--') + 1:]
+    except ValueError:
+        return []
+
 class WebkitFlatpak:
 
     @staticmethod
@@ -513,7 +520,8 @@ class WebkitFlatpak:
         buildoptions.add_argument("--cmakeargs",
                                   help="One or more optional CMake flags (e.g. --cmakeargs=\"-DFOO=bar -DCMAKE_PREFIX_PATH=/usr/local\")")
 
-        _, self.args = parser.parse_known_args(args=args, namespace=self)
+        parsing_namespace, self.args = parser.parse_known_args(args=args, namespace=self)
+        self.extra_command_args = extract_extra_command_args(parsing_namespace.args)
 
         if not self.build_type:
             self.build_type = "Release"
@@ -757,7 +765,7 @@ class WebkitFlatpak:
         sandbox_build_path = os.path.join(SANDBOX_SOURCE_ROOT, BUILD_ROOT_DIR_NAME, self.build_type)
         sandbox_environment = {
             "TEST_RUNNER_INJECTED_BUNDLE_FILENAME": os.path.join(sandbox_build_path, "lib/libTestRunnerInjectedBundle.so"),
-            "PATH": "/usr/lib/sdk/llvm12/bin:/usr/bin:/usr/lib/sdk/rust/bin/",
+            "PATH": "/usr/lib/sdk/llvm13/bin:/usr/bin:/usr/lib/sdk/rust/bin/",
         }
 
         if not args:
@@ -838,6 +846,7 @@ class WebkitFlatpak:
             "MESA",
             "LIBGL",
             "PIPEWIRE",
+            "NICE",
             "RUST",
             "SCCACHE",
             "SPA",
@@ -1208,7 +1217,7 @@ class WebkitFlatpak:
             if self.is_build_webkit(program) and self.cmakeargs:
                 self.user_command.append("--cmakeargs=%s" % self.cmakeargs)
 
-            return self.run_in_sandbox(*self.user_command)
+            return self.run_in_sandbox(*self.user_command + self.extra_command_args)
         elif not self.update and not self.build_gst and not self.regenerate_toolchains:
             return self.run_in_sandbox()
 
@@ -1223,7 +1232,7 @@ class WebkitFlatpak:
         packages = [self.runtime, self.sdk]
         packages.append(FlatpakPackage('org.webkit.Sdk.Debug', SDK_BRANCH,
                                        self.sdk_repo, arch))
-        packages.append(FlatpakPackage("org.freedesktop.Sdk.Extension.llvm12", SDK_BRANCH,
+        packages.append(FlatpakPackage("org.freedesktop.Sdk.Extension.llvm13", SDK_BRANCH,
                                        self.flathub_repo, arch))
         packages.append(FlatpakPackage("org.freedesktop.Platform.GL.default", SDK_BRANCH,
                                        self.flathub_repo, arch))

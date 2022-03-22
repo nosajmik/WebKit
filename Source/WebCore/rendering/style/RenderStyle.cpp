@@ -111,6 +111,20 @@ RenderStyle RenderStyle::clone(const RenderStyle& style)
     return RenderStyle(style, Clone);
 }
 
+RenderStyle RenderStyle::cloneIncludingPseudoElements(const RenderStyle& style)
+{
+    auto newStyle = RenderStyle(style, Clone);
+
+    if (!style.m_cachedPseudoStyles)
+        return newStyle;
+
+    for (auto& pseudoElementStyle : *style.m_cachedPseudoStyles) {
+        auto clone = makeUnique<RenderStyle>(cloneIncludingPseudoElements(*pseudoElementStyle));
+        newStyle.addCachedPseudoStyle(WTFMove(clone));
+    }
+    return newStyle;
+}
+
 std::unique_ptr<RenderStyle> RenderStyle::clonePtr(const RenderStyle& style)
 {
     return makeUnique<RenderStyle>(style, Clone);
@@ -154,7 +168,7 @@ RenderStyle::RenderStyle(CreateDefaultStyleTag)
     m_inheritedFlags.visibility = static_cast<unsigned>(initialVisibility());
     m_inheritedFlags.textAlign = static_cast<unsigned>(initialTextAlign());
     m_inheritedFlags.textTransform = static_cast<unsigned>(initialTextTransform());
-    m_inheritedFlags.textDecorations = initialTextDecoration().toRaw();
+    m_inheritedFlags.textDecorationLines = initialTextDecorationLine().toRaw();
     m_inheritedFlags.cursor = static_cast<unsigned>(initialCursor());
 #if ENABLE(CURSOR_VISIBILITY)
     m_inheritedFlags.cursorVisibility = static_cast<unsigned>(initialCursorVisibility());
@@ -183,7 +197,10 @@ RenderStyle::RenderStyle(CreateDefaultStyleTag)
     m_nonInheritedFlags.unicodeBidi = static_cast<unsigned>(initialUnicodeBidi());
     m_nonInheritedFlags.floating = static_cast<unsigned>(initialFloating());
     m_nonInheritedFlags.tableLayout = static_cast<unsigned>(initialTableLayout());
-    m_nonInheritedFlags.hasExplicitlySetBorderRadius = false;
+    m_nonInheritedFlags.hasExplicitlySetBorderBottomLeftRadius = false;
+    m_nonInheritedFlags.hasExplicitlySetBorderBottomRightRadius = false;
+    m_nonInheritedFlags.hasExplicitlySetBorderTopLeftRadius = false;
+    m_nonInheritedFlags.hasExplicitlySetBorderTopRightRadius = false;
     m_nonInheritedFlags.hasExplicitlySetDirection = false;
     m_nonInheritedFlags.hasExplicitlySetWritingMode = false;
     m_nonInheritedFlags.hasExplicitlySetTextAlign = false;
@@ -391,9 +408,6 @@ RenderStyle* RenderStyle::getCachedPseudoStyle(PseudoId pid) const
     if (!m_cachedPseudoStyles || !m_cachedPseudoStyles->size())
         return nullptr;
 
-    if (styleType() != PseudoId::None) 
-        return nullptr;
-
     for (auto& pseudoStyle : *m_cachedPseudoStyles) {
         if (pseudoStyle->styleType() == pid)
             return pseudoStyle.get();
@@ -447,6 +461,13 @@ bool RenderStyle::descendantAffectingNonInheritedPropertiesEqual(const RenderSty
     
     return m_rareNonInheritedData->alignItems == other.m_rareNonInheritedData->alignItems
         && m_rareNonInheritedData->justifyItems == other.m_rareNonInheritedData->justifyItems;
+}
+
+bool RenderStyle::borderAndBackgroundEqual(const RenderStyle& other) const
+{
+    return border() == other.border()
+        && backgroundLayers() == other.backgroundLayers()
+        && backgroundColorEqualsToColorIgnoringVisited(other.backgroundColor());
 }
 
 #if ENABLE(TEXT_AUTOSIZING)
@@ -628,7 +649,7 @@ inline bool RenderStyle::changeAffectsVisualOverflow(const RenderStyle& other) c
         && !arePointingToEqualData(m_rareInheritedData->textShadow, other.m_rareInheritedData->textShadow))
         return true;
 
-    if (m_inheritedFlags.textDecorations != other.m_inheritedFlags.textDecorations
+    if (m_inheritedFlags.textDecorationLines != other.m_inheritedFlags.textDecorationLines
         || m_rareNonInheritedData->textDecorationStyle != other.m_rareNonInheritedData->textDecorationStyle
         || m_rareInheritedData->textDecorationThickness != other.m_rareInheritedData->textDecorationThickness
         || m_rareInheritedData->textUnderlineOffset != other.m_rareInheritedData->textUnderlineOffset
@@ -640,8 +661,12 @@ inline bool RenderStyle::changeAffectsVisualOverflow(const RenderStyle& other) c
         return visualOverflowForDecorations(*this, { }) != visualOverflowForDecorations(other, { });
     }
 
-    if (hasOutlineInVisualOverflow() != other.hasOutlineInVisualOverflow())
+    auto hasOutlineInVisualOverflow = this->hasOutlineInVisualOverflow();
+    auto otherHasOutlineInVisualOverflow = other.hasOutlineInVisualOverflow();
+    if (hasOutlineInVisualOverflow != otherHasOutlineInVisualOverflow
+        || (hasOutlineInVisualOverflow && otherHasOutlineInVisualOverflow && outlineSize() != other.outlineSize()))
         return true;
+
     return false;
 }
 
@@ -1166,8 +1191,8 @@ bool RenderStyle::changeRequiresRepaint(const RenderStyle& other, OptionSet<Styl
 bool RenderStyle::changeRequiresRepaintIfTextOrBorderOrOutline(const RenderStyle& other, OptionSet<StyleDifferenceContextSensitiveProperty>&) const
 {
     if (m_inheritedData->color != other.m_inheritedData->color
-        || m_inheritedFlags.textDecorations != other.m_inheritedFlags.textDecorations
-        || m_visualData->textDecoration != other.m_visualData->textDecoration
+        || m_inheritedFlags.textDecorationLines != other.m_inheritedFlags.textDecorationLines
+        || m_visualData->textDecorationLine != other.m_visualData->textDecorationLine
         || m_rareNonInheritedData->textDecorationStyle != other.m_rareNonInheritedData->textDecorationStyle
         || m_rareNonInheritedData->textDecorationColor != other.m_rareNonInheritedData->textDecorationColor
         || m_rareInheritedData->textDecorationSkipInk != other.m_rareInheritedData->textDecorationSkipInk
@@ -1406,26 +1431,64 @@ void RenderStyle::setHasAttrContent()
     SET_VAR(m_rareNonInheritedData, hasAttrContent, true);
 }
 
+bool RenderStyle::affectedByTransformOrigin() const
+{
+    if (m_rareNonInheritedData->rotate && !m_rareNonInheritedData->rotate->isIdentity())
+        return true;
+
+    if (m_rareNonInheritedData->scale && !m_rareNonInheritedData->scale->isIdentity())
+        return true;
+
+    auto& transformOperations = m_rareNonInheritedData->transform->operations;
+    if (transformOperations.affectedByTransformOrigin())
+        return true;
+
+    if (offsetPath())
+        return true;
+
+    return false;
+}
+
+FloatPoint3D RenderStyle::applyTransformOrigin(TransformationMatrix& transform, const FloatRect& boundingBox) const
+{
+    // https://www.w3.org/TR/css-transforms-2/#ctm
+    // 2. Translate by the computed X, Y, and Z values of transform-origin.
+    FloatPoint3D originTranslate;
+    originTranslate.setXY(boundingBox.location() + floatPointForLengthPoint(transformOriginXY(), boundingBox.size()));
+    originTranslate.setZ(transformOriginZ());
+    if (!originTranslate.isZero())
+        transform.translate3d(originTranslate.x(), originTranslate.y(), originTranslate.z());
+    return originTranslate;
+}
+
+void RenderStyle::unapplyTransformOrigin(TransformationMatrix& transform, const FloatPoint3D& originTranslate) const
+{
+    // https://www.w3.org/TR/css-transforms-2/#ctm
+    // 8. Translate by the negated computed X, Y and Z values of transform-origin.
+    if (!originTranslate.isZero())
+        transform.translate3d(-originTranslate.x(), -originTranslate.y(), -originTranslate.z());
+}
+
 void RenderStyle::applyTransform(TransformationMatrix& transform, const FloatRect& boundingBox, OptionSet<RenderStyle::TransformOperationOption> options) const
+{
+    if (!options.contains(RenderStyle::TransformOperationOption::TransformOrigin) || !affectedByTransformOrigin()) {
+        applyCSSTransform(transform, boundingBox, options);
+        return;
+    }
+
+    auto originTranslate = applyTransformOrigin(transform, boundingBox);
+    applyCSSTransform(transform, boundingBox, options);
+    unapplyTransformOrigin(transform, originTranslate);
+}
+
+void RenderStyle::applyCSSTransform(TransformationMatrix& transform, const FloatRect& boundingBox, OptionSet<RenderStyle::TransformOperationOption> options) const
 {
     // https://www.w3.org/TR/css-transforms-2/#ctm
     // The transformation matrix is computed from the transform, transform-origin, translate, rotate, scale, and offset properties as follows:
     // 1. Start with the identity matrix.
 
-    auto& transformOperations = m_rareNonInheritedData->transform->operations;
-    bool applyTransformOrigin = options.contains(RenderStyle::TransformOperationOption::TransformOrigin)
-        && ((m_rareNonInheritedData->rotate && !m_rareNonInheritedData->rotate->isIdentity())
-            || (m_rareNonInheritedData->scale && !m_rareNonInheritedData->scale->isIdentity())
-            || transformOperations.affectedByTransformOrigin()
-            || offsetPath());
-
     // 2. Translate by the computed X, Y, and Z values of transform-origin.
-    FloatPoint3D originTranslate;
-    if (applyTransformOrigin) {
-        originTranslate.setXY(boundingBox.location() + floatPointForLengthPoint(transformOriginXY(), boundingBox.size()));
-        originTranslate.setZ(transformOriginZ());
-        transform.translate3d(originTranslate.x(), originTranslate.y(), originTranslate.z());
-    }
+    // (implemented in applyTransformOrigin)
 
     // 3. Translate by the computed X, Y, and Z values of translate.
     if (options.contains(RenderStyle::TransformOperationOption::Translate)) {
@@ -1450,12 +1513,12 @@ void RenderStyle::applyTransform(TransformationMatrix& transform, const FloatRec
         applyMotionPathTransform(transform, boundingBox);
 
     // 7. Multiply by each of the transform functions in transform from left to right.
+    auto& transformOperations = m_rareNonInheritedData->transform->operations;
     for (auto& operation : transformOperations.operations())
         operation->apply(transform, boundingBox.size());
 
     // 8. Translate by the negated computed X, Y and Z values of transform-origin.
-    if (applyTransformOrigin)
-        transform.translate3d(-originTranslate.x(), -originTranslate.y(), -originTranslate.z());
+    // (implemented in unapplyTransformOrigin)
 }
 
 static std::optional<Path> getPathFromPathOperation(const FloatRect& box, const PathOperation& operation)
@@ -1669,15 +1732,6 @@ static bool allLayersAreFixed(const FillLayer& layers)
 bool RenderStyle::hasEntirelyFixedBackground() const
 {
     return allLayersAreFixed(backgroundLayers());
-}
-
-bool RenderStyle::hasAnyLocalBackground() const
-{
-    for (auto* layer = &backgroundLayers(); layer; layer = layer->next()) {
-        if (layer->image() && layer->attachment() == FillAttachment::LocalBackground)
-            return true;
-    }
-    return false;
 }
 
 const CounterDirectiveMap* RenderStyle::counterDirectives() const

@@ -24,7 +24,7 @@
  */
 
 #include "config.h"
-#include "InlineIteratorLine.h"
+#include "InlineIteratorLineBox.h"
 
 #include "InlineIteratorBox.h"
 #include "LayoutIntegrationLineLayout.h"
@@ -33,191 +33,123 @@
 namespace WebCore {
 namespace InlineIterator {
 
-LineIterator::LineIterator(Line::PathVariant&& pathVariant)
-    : m_line(WTFMove(pathVariant))
+LineBoxIterator::LineBoxIterator(LineBox::PathVariant&& pathVariant)
+    : m_lineBox(WTFMove(pathVariant))
 {
 }
 
-LineIterator::LineIterator(const Line& line)
-    : m_line(line)
+LineBoxIterator::LineBoxIterator(const LineBox& lineBox)
+    : m_lineBox(lineBox)
 {
 }
 
-bool LineIterator::atEnd() const
+bool LineBoxIterator::atEnd() const
 {
-    return WTF::switchOn(m_line.m_pathVariant, [](auto& path) {
+    return WTF::switchOn(m_lineBox.m_pathVariant, [](auto& path) {
         return path.atEnd();
     });
 }
 
-LineIterator& LineIterator::traverseNext()
+LineBoxIterator& LineBoxIterator::traverseNext()
 {
-    WTF::switchOn(m_line.m_pathVariant, [](auto& path) {
+    WTF::switchOn(m_lineBox.m_pathVariant, [](auto& path) {
         return path.traverseNext();
     });
     return *this;
 }
 
-LineIterator& LineIterator::traversePrevious()
+LineBoxIterator& LineBoxIterator::traversePrevious()
 {
-    WTF::switchOn(m_line.m_pathVariant, [](auto& path) {
+    WTF::switchOn(m_lineBox.m_pathVariant, [](auto& path) {
         return path.traversePrevious();
     });
     return *this;
 }
 
-bool LineIterator::operator==(const LineIterator& other) const
+bool LineBoxIterator::operator==(const LineBoxIterator& other) const
 {
-    return m_line.m_pathVariant == other.m_line.m_pathVariant;
+    return m_lineBox.m_pathVariant == other.m_lineBox.m_pathVariant;
 }
 
-LineIterator firstLineFor(const RenderBlockFlow& flow)
-{
-#if ENABLE(LAYOUT_FORMATTING_CONTEXT)
-    if (auto* lineLayout = flow.modernLineLayout())
-        return lineLayout->firstLine();
-#endif
-
-    return { LineIteratorLegacyPath { flow.firstRootBox() } };
-}
-
-LineIterator lastLineFor(const RenderBlockFlow& flow)
+LineBoxIterator firstLineBoxFor(const RenderBlockFlow& flow)
 {
 #if ENABLE(LAYOUT_FORMATTING_CONTEXT)
     if (auto* lineLayout = flow.modernLineLayout())
-        return lineLayout->lastLine();
+        return lineLayout->firstLineBox();
 #endif
 
-    return { LineIteratorLegacyPath { flow.lastRootBox() } };
+    return { LineBoxIteratorLegacyPath { flow.firstRootBox() } };
 }
 
-LineIterator Line::next() const
+LineBoxIterator lastLineBoxFor(const RenderBlockFlow& flow)
 {
-    return LineIterator(*this).traverseNext();
+#if ENABLE(LAYOUT_FORMATTING_CONTEXT)
+    if (auto* lineLayout = flow.modernLineLayout())
+        return lineLayout->lastLineBox();
+#endif
+
+    return { LineBoxIteratorLegacyPath { flow.lastRootBox() } };
 }
 
-LineIterator Line::previous() const
+LineBoxIterator LineBox::next() const
 {
-    return LineIterator(*this).traversePrevious();
+    return LineBoxIterator(*this).traverseNext();
 }
 
-LeafBoxIterator Line::firstLeafBox() const
+LineBoxIterator LineBox::previous() const
+{
+    return LineBoxIterator(*this).traversePrevious();
+}
+
+LeafBoxIterator LineBox::firstLeafBox() const
 {
     return WTF::switchOn(m_pathVariant, [](auto& path) -> LeafBoxIterator {
         return { path.firstLeafBox() };
     });
 }
 
-LeafBoxIterator Line::lastLeafBox() const
+LeafBoxIterator LineBox::lastLeafBox() const
 {
     return WTF::switchOn(m_pathVariant, [](auto& path) -> LeafBoxIterator {
         return { path.lastLeafBox() };
     });
 }
 
-LeafBoxIterator Line::closestRunForPoint(const IntPoint& pointInContents, bool editableOnly) const
+LeafBoxIterator closestBoxForHorizontalPosition(const LineBox& lineBox, float horizontalPosition, bool editableOnly)
 {
-    return closestRunForLogicalLeftPosition(isHorizontal() ? pointInContents.x() : pointInContents.y(), editableOnly);
-}
-
-LeafBoxIterator Line::closestRunForLogicalLeftPosition(int leftPosition, bool editableOnly) const
-{
-    auto isEditable = [&](auto run) {
-        return run && run->renderer().node() && run->renderer().node()->hasEditableStyle();
+    auto isEditable = [&](auto box) {
+        return box && box->renderer().node() && box->renderer().node()->hasEditableStyle();
     };
 
-    auto firstRun = this->firstLeafBox();
-    auto lastRun = this->lastLeafBox();
+    auto firstBox = lineBox.firstLeafBox();
+    auto lastBox = lineBox.lastLeafBox();
 
-    if (firstRun != lastRun) {
-        if (firstRun->isLineBreak())
-            firstRun = firstRun->nextOnLineIgnoringLineBreak();
-        else if (lastRun->isLineBreak())
-            lastRun = lastRun->previousOnLineIgnoringLineBreak();
+    if (firstBox != lastBox) {
+        if (firstBox->isLineBreak())
+            firstBox = firstBox->nextOnLineIgnoringLineBreak();
+        else if (lastBox->isLineBreak())
+            lastBox = lastBox->previousOnLineIgnoringLineBreak();
     }
 
-    if (firstRun == lastRun && (!editableOnly || isEditable(firstRun)))
-        return firstRun;
+    if (firstBox == lastBox && (!editableOnly || isEditable(firstBox)))
+        return firstBox;
 
-    if (firstRun && leftPosition <= firstRun->logicalLeft() && !firstRun->renderer().isListMarker() && (!editableOnly || isEditable(firstRun)))
-        return firstRun;
+    if (firstBox && horizontalPosition <= firstBox->logicalLeft() && !firstBox->renderer().isListMarker() && (!editableOnly || isEditable(firstBox)))
+        return firstBox;
 
-    if (lastRun && leftPosition >= lastRun->logicalRight() && !lastRun->renderer().isListMarker() && (!editableOnly || isEditable(lastRun)))
-        return lastRun;
+    if (lastBox && horizontalPosition >= lastBox->logicalRight() && !lastBox->renderer().isListMarker() && (!editableOnly || isEditable(lastBox)))
+        return lastBox;
 
-    auto closestRun = lastRun;
-    for (auto run = firstRun; run; run = run.traverseNextOnLineIgnoringLineBreak()) {
-        if (!run->renderer().isListMarker() && (!editableOnly || isEditable(run))) {
-            if (leftPosition < run->logicalRight())
-                return run;
-            closestRun = run;
+    auto closestBox = lastBox;
+    for (auto box = firstBox; box; box = box.traverseNextOnLineIgnoringLineBreak()) {
+        if (!box->renderer().isListMarker() && (!editableOnly || isEditable(box))) {
+            if (horizontalPosition < box->logicalRight())
+                return box;
+            closestBox = box;
         }
     }
 
-    return closestRun;
-}
-
-int Line::blockDirectionPointInLine() const
-{
-    return !containingBlock().style().isFlippedBlocksWritingMode() ? std::max(top(), selectionTopForHitTesting()) : std::min(bottom(), selectionBottom());
-}
-
-LayoutUnit Line::selectionTopAdjustedForPrecedingBlock() const
-{
-    return containingBlock().adjustSelectionTopForPrecedingBlock(selectionTop());
-}
-
-LayoutUnit Line::selectionHeightAdjustedForPrecedingBlock() const
-{
-    return std::max<LayoutUnit>(0, selectionBottom() - selectionTopAdjustedForPrecedingBlock());
-}
-
-RenderObject::HighlightState Line::selectionState() const
-{
-    auto& block = containingBlock();
-    if (block.selectionState() == RenderObject::HighlightState::None)
-        return RenderObject::HighlightState::None;
-
-    auto lineState = RenderObject::HighlightState::None;
-    for (auto box = firstLeafBox(); box; box.traverseNextOnLine()) {
-        auto boxState = box->selectionState();
-        if (lineState == RenderObject::HighlightState::None)
-            lineState = boxState;
-        else if (lineState == RenderObject::HighlightState::Start) {
-            if (boxState == RenderObject::HighlightState::End || boxState == RenderObject::HighlightState::None)
-                lineState = RenderObject::HighlightState::Both;
-        } else if (lineState == RenderObject::HighlightState::Inside) {
-            if (boxState == RenderObject::HighlightState::Start || boxState == RenderObject::HighlightState::End)
-                lineState = boxState;
-            else if (boxState == RenderObject::HighlightState::None)
-                lineState = RenderObject::HighlightState::End;
-        } else if (lineState == RenderObject::HighlightState::End) {
-            if (boxState == RenderObject::HighlightState::Start)
-                lineState = RenderObject::HighlightState::Both;
-        }
-
-        if (lineState == RenderObject::HighlightState::Both)
-            break;
-    }
-    return lineState;
-}
-
-LeafBoxIterator Line::firstSelectedBox() const
-{
-    for (auto box = firstLeafBox(); box; box.traverseNextOnLine()) {
-        if (box->selectionState() != RenderObject::HighlightState::None)
-            return box;
-    }
-    return { };
-}
-
-LeafBoxIterator Line::lastSelectedBox() const
-{
-    for (auto box = lastLeafBox(); box; box.traversePreviousOnLine()) {
-        if (box->selectionState() != RenderObject::HighlightState::None)
-            return box;
-    }
-    return { };
+    return closestBox;
 }
 
 }

@@ -145,7 +145,7 @@ void NetworkNotificationManager::subscribeToPushService(URL&& scopeURL, Vector<u
     sendMessageWithReply<WebPushD::MessageType::SubscribeToPushService>(WTFMove(completionHandler), WTFMove(scopeURL), WTFMove(applicationServerKey));
 }
 
-void NetworkNotificationManager::unsubscribeFromPushService(URL&& scopeURL, PushSubscriptionIdentifier pushSubscriptionIdentifier, CompletionHandler<void(Expected<bool, WebCore::ExceptionData>&&)>&& completionHandler)
+void NetworkNotificationManager::unsubscribeFromPushService(URL&& scopeURL, std::optional<PushSubscriptionIdentifier> pushSubscriptionIdentifier, CompletionHandler<void(Expected<bool, WebCore::ExceptionData>&&)>&& completionHandler)
 {
     if (!m_connection) {
         completionHandler(makeUnexpected(ExceptionData { AbortError, "No connection to push daemon"_s }));
@@ -173,6 +173,36 @@ void NetworkNotificationManager::getPushPermissionState(URL&& scopeURL, Completi
     }
 
     sendMessageWithReply<WebPushD::MessageType::GetPushPermissionState>(WTFMove(completionHandler), WTFMove(scopeURL));
+}
+
+void NetworkNotificationManager::incrementSilentPushCount(WebCore::SecurityOriginData&& origin, CompletionHandler<void(unsigned)>&& completionHandler)
+{
+    if (!m_connection) {
+        completionHandler(0);
+        return;
+    }
+
+    sendMessageWithReply<WebPushD::MessageType::IncrementSilentPushCount>(WTFMove(completionHandler), WTFMove(origin));
+}
+
+void NetworkNotificationManager::removeAllPushSubscriptions(CompletionHandler<void(unsigned)>&& completionHandler)
+{
+    if (!m_connection) {
+        completionHandler(0);
+        return;
+    }
+
+    sendMessageWithReply<WebPushD::MessageType::RemoveAllPushSubscriptions>(WTFMove(completionHandler));
+}
+
+void NetworkNotificationManager::removePushSubscriptionsForOrigin(WebCore::SecurityOriginData&& origin, CompletionHandler<void(unsigned)>&& completionHandler)
+{
+    if (!m_connection) {
+        completionHandler(0);
+        return;
+    }
+
+    sendMessageWithReply<WebPushD::MessageType::RemovePushSubscriptionsForOrigin>(WTFMove(completionHandler), WTFMove(origin));
 }
 
 template<WebPushD::MessageType messageType, typename... Args>
@@ -225,6 +255,17 @@ template<> struct ReplyCaller<bool> {
         if (!boolean)
             return completionHandler(false);
         completionHandler(*boolean);
+    }
+};
+
+template<> struct ReplyCaller<unsigned> {
+    static void callReply(Daemon::Decoder&& decoder, CompletionHandler<void(bool)>&& completionHandler)
+    {
+        std::optional<int> value;
+        decoder >> value;
+        if (!value)
+            return completionHandler(0);
+        completionHandler(*value);
     }
 };
 

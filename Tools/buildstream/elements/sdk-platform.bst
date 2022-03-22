@@ -19,6 +19,7 @@ depends:
 - sdk/eigen.bst
 - sdk/enchant-2.bst
 - sdk/ffmpeg.bst
+- sdk/gi-docgen.bst
 - sdk/glib-networking.bst
 - sdk/glib.bst
 - sdk/graphviz.bst
@@ -54,16 +55,10 @@ depends:
 - sdk/perl-term-readkey.bst
 - sdk/psmisc.bst
 - sdk/pygls.bst
-- sdk/python2-pycairo.bst
-- sdk/python2-pygobject.bst
-- sdk/python2-six.bst
-- sdk/python2-subprocess32.bst
-- sdk/python2.bst
-- sdk/ruby-highline.bst
 - sdk/ruby-json.bst
+- sdk/ruby-highline.bst
 - sdk/ruby-webrick.bst
 - sdk/sccache.bst
-- sdk/shared-mime-info.bst
 - sdk/sparkle-cdm.bst
 - sdk/subversion.bst
 - sdk/woff2.bst
@@ -208,6 +203,7 @@ depends:
 - freedesktop-sdk.bst:components/sdl2-net.bst
 - freedesktop-sdk.bst:components/sdl2-ttf.bst
 - freedesktop-sdk.bst:components/sdl2.bst
+- freedesktop-sdk.bst:components/shared-mime-info.bst
 - freedesktop-sdk.bst:components/sndfile.bst
 - freedesktop-sdk.bst:components/speex.bst
 - freedesktop-sdk.bst:components/speexdsp.bst

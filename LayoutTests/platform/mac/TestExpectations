@@ -115,7 +115,6 @@ model-element/model-element-interactive-dragging.html [ Skip ]
 accessibility/aria-checkbox-sends-notification.html
 accessibility/aria-switch-sends-notification.html
 accessibility/combo-box-collapsed-selection-changed.html
-accessibility/children-changed-sends-notification.html
 accessibility/multiselect-list-reports-active-option.html
 
 # Need to implement AccessibilityUIElement::clearSelectedChildren()
@@ -1024,8 +1023,6 @@ webkit.org/b/187103 js/error-should-not-strong-reference-global-object.html [ Pa
 webkit.org/b/155505 http/tests/security/contentSecurityPolicy/userAgentShadowDOM/allow-audio.html [ Skip ]
 webkit.org/b/155505 http/tests/security/contentSecurityPolicy/userAgentShadowDOM/allow-video.html [ Skip ]
 
-webkit.org/b/230428 http/tests/security/contentSecurityPolicy/frame-src-cross-origin-load.html [ Pass Failure ]
-
 webkit.org/b/154688 inspector/controller/runtime-controller.html [ Pass Timeout ]
 
 webkit.org/b/156351 storage/indexeddb/modern/autoincrement-abort-private.html [ Pass Timeout ]
@@ -1046,6 +1043,7 @@ webkit.org/b/158649 fast/text/chinese-font-name-aliases-2.html [ ImageOnlyFailur
 
 fast/css/appearance-apple-pay-button.html [ Pass ]
 fast/css/appearance-apple-pay-button-border-radius.html [ Pass ]
+fast/css/appearance-apple-pay-button-border-radius-longhands.html [ Pass ]
 fast/css/appearance-apple-pay-button-default-corners.html [ Pass ]
 fast/css/webkit-named-image/apple-pay-logo-black [ Pass ]
 fast/css/webkit-named-image/apple-pay-logo-white [ Pass ]
@@ -1707,8 +1705,6 @@ webkit.org/b/215110 [ Release ] imported/w3c/web-platform-tests/css/css-animatio
 
 webkit.org/b/215177 [ Release ] editing/selection/navigation-clears-editor-state.html [ Pass Failure ]
 
-webkit.org/b/215271 [ Debug ] storage/indexeddb/modern/new-database-after-user-delete.html [ Pass Failure ]
-
 webkit.org/b/215450 imported/w3c/web-platform-tests/media-source/mediasource-changetype-play-negative.html [ Pass Failure ]
 
 # <rdar://problem/31017631> Stress GC bot failing LayoutTest step with timeout while running WebCryptoAPI/derive_bits_keys tests
@@ -1959,8 +1955,6 @@ webkit.org/b/189672 [ Release ] webgl/2.0.0/conformance2/textures/canvas/tex-2d-
 
 webkit.org/b/191627 imported/w3c/web-platform-tests/css/css-grid/alignment/grid-self-baseline-not-applied-if-sizing-cyclic-dependency-001.html [ Pass ]
 
-webkit.org/b/215814 [ Debug ] inspector/console/queryInstances.html [ Pass Failure ]
-
 webkit.org/b/215817 [ Release ] webgl/2.0.0/conformance2/textures/canvas_sub_rectangle/tex-2d-rgb32f-rgb-float.html [ Pass Failure ]
 
 webkit.org/b/219448 [ Debug ] webgl/2.0.0/conformance/rendering/multisample-corruption.html [ Skip ]
@@ -2003,7 +1997,6 @@ webkit.org/b/222425 [ BigSur+ ] http/tests/media/hls/hls-hdr-switch.html [ Timeo
 
 # These tests fail in Mac due to subpixel differences for the marker position
 imported/w3c/web-platform-tests/css/css-lists/list-style-type-string-002.html [ ImageOnlyFailure ]
-imported/w3c/web-platform-tests/css/css-lists/list-style-type-string-004.html [ ImageOnlyFailure ]
 
 webkit.org/b/217461 [ Mojave+ ] imported/w3c/web-platform-tests/css/css-masking/clip-path/svg-clipPath.svg [ Skip ]
 
@@ -2083,24 +2076,10 @@ webkit.org/b/222692 inspector/page/empty-or-missing-resources.html [ Pass Timeou
 [ Debug arm64 ] svg/W3C-SVG-1.1/paths-data-03-f.svg [ Failure ]
 
 # webkit.org/b/223043 the following tests have issues only on Apple Silicon
-[ arm64 ] webrtc/concurrentVideoPlayback2.html [ Pass Timeout ]
-[ arm64 ] webrtc/concurrentVideoPlayback.html [ Pass Timeout ]
-[ arm64 ] webrtc/multi-video.html [ Pass Timeout ]
-[ arm64 ] webrtc/h265.html [ Pass Timeout ]
-[ arm64 ] webrtc/video-setDirection.html [ Pass Timeout ]
-[ arm64 ] webrtc/video-rotation.html [ Pass Timeout ]
-[ arm64 ] webrtc/video-rotation-no-cvo.html [ Pass Timeout ]
-[ arm64 ] webrtc/video-sframe.html [ Pass Timeout ]
-[ arm64 ] webrtc/video.html [ Pass Timeout ]
-[ arm64 ] webrtc/video-with-data-channel.html [ Pass Timeout ]
-[ arm64 ] webrtc/video-unmute.html [ Pass Timeout ]
-[ arm64 ] webrtc/vp9-profile2.html [ Skip ]
 [ arm64 ] webrtc/captureCanvas-webrtc-software-h264-high.html [ Pass Failure ]
-#These two are failing on intel as well for ews
 webrtc/h264-baseline.html  [ Failure Timeout ]
-webrtc/video-stats.html [ Pass Failure ]
 
-webkit.org/b/223043 [ BigSur ] webrtc/multi-audio.html [ Pass Failure ]
+webkit.org/b/238104 [ arm64 ] webrtc/vp9-profile2.html [ Skip ]
 
 webkit.org/b/223259 [ arm64 ] webgl/2.0.0/conformance2/textures/misc/tex-mipmap-levels.html [ Failure ]
 
@@ -2212,9 +2191,6 @@ webkit.org/b/226050 imported/w3c/web-platform-tests/IndexedDB/blob-valid-before-
 
 webkit.org/b/226299 [ BigSur ] http/tests/performance/performance-resource-timing-resourcetimingbufferfull-crash.html [ Pass Failure ]
 
-# rdar://77527575 (REGRESSION: [ Monterey ] imported/w3c/web-platform-tests/html/canvas/element/line-styles/2d.line.width.scaledefault.html is a constant text failure 77527575)
-[ Monterey ] imported/w3c/web-platform-tests/html/canvas/element/line-styles/2d.line.width.scaledefault.html [ Pass Failure ]
-
 # rdar://78477744 (REGRESSION: [ Monterey ] 3 imported/w3c/web-platform-tests/css/css-text-decor (layout-tests) are constant ImageOnlyFailures)
 [ Monterey ] imported/w3c/web-platform-tests/css/css-text-decor/text-decoration-thickness-from-font-variable.html [ Pass ImageOnlyFailure ]
 [ Monterey ] imported/w3c/web-platform-tests/css/css-text-decor/text-underline-offset-variable.html [ Pass ImageOnlyFailure ]
@@ -2246,8 +2222,6 @@ webkit.org/b/228002 transitions/transition-end-event-nested.html [ Pass Failure 
 
 webkit.org/b/227877 imported/w3c/web-platform-tests/navigation-timing/test_timing_attributes_order.html [ Pass Failure ]
 
-webkit.org/b/228011 inspector/canvas/setRecordingAutoCaptureFrameCount.html [ Pass Failure ]
-
 webkit.org/b/214574 svg/animations/smil-leak-list-property-instances.svg [ Pass Failure ]
 
 webkit.org/b/222385 imported/w3c/web-platform-tests/xhr/event-upload-progress-crossorigin.any.worker.html [ Pass Failure ]
@@ -2268,8 +2242,6 @@ webkit.org/b/228311 imported/w3c/web-platform-tests/css/css-scoping/css-scoping-
 #rdar://82053210 ([Guard-Malloc] imported/w3c/web-platform-tests/mathml/relations/html5-tree/display-2.html is a flaky failure)
 imported/w3c/web-platform-tests/mathml/relations/html5-tree/display-2.html [ Pass ImageOnlyFailure ]
 
-webkit.org/b/229244 imported/w3c/web-platform-tests/IndexedDB/key-generators/reading-autoincrement-indexes-cursors.any.worker.html [ Pass Crash ]
-
 webkit.org/b/229291 imported/w3c/web-platform-tests/html/rendering/replaced-elements/images/revoked-blob-print.html [ Pass ImageOnlyFailure ]
 
 #rdar://82146367 ([Mac, iOS Release] imported/w3c/web-platform-tests/worklets/layout-worklet-csp.https.html is a flaky failure) imported/w3c/web-platform-tests/worklets/layout-worklet-csp.https.html [ Pass Failure ] 
@@ -2289,8 +2261,6 @@ webkit.org/b/228642 imported/w3c/web-platform-tests/html/cross-origin-opener-pol
 
 webkit.org/b/229517 imported/w3c/web-platform-tests/webrtc-extensions/RTCRtpSynchronizationSource-captureTimestamp.html [ Pass Failure ]
 webkit.org/b/229517 imported/w3c/web-platform-tests/webrtc-extensions/RTCRtpSynchronizationSource-senderCaptureTimeOffset.html [ Pass Failure ]
-
-webkit.org/b/230116 imported/w3c/web-platform-tests/webrtc-extensions/transfer-datachannel.html [ Pass Failure ]
 
 # accent-color is currently only supported on Cocoa platforms
 fast/css/accent-color/checkbox.html [ Pass ]
@@ -2350,6 +2320,9 @@ webkit.org/b/189448 [ Mojave Catalina ] fast/text/osaka-synthetic-bold.html [ Sk
 
 webkit.org/b/230327 imported/w3c/web-platform-tests/css/css-transforms/crashtests/transform-marquee-resize-div-image-001.html [ Pass Failure ]
 
+# 'transform-box' support is broken for composited elements.
+webkit.org/b/237553 imported/w3c/web-platform-tests/css/css-transforms/animation/transform-box-will-change-transform-layer.html [ ImageOnlyFailure ]
+
 # rdar://83591040
 [ Monterey+ ] editing/mac/dictionary-lookup/dictionary-lookup-input.html [ Crash ]
 [ Monterey+ ] editing/mac/dictionary-lookup/dictionary-lookup-inside-selection.html [ Crash ]
@@ -2399,6 +2372,8 @@ webkit.org/b/237172 imported/w3c/web-platform-tests/speech-api/SpeechSynthesis-s
 
 webkit.org/b/233047 inspector/page/setShowPaintRects.html [ Pass Failure ]
 
+webkit.org/b/237680 imported/w3c/web-platform-tests/service-workers/service-worker/partitioned-service-worker-matchAll.tentative.https.html [ Pass Failure ]
+
 # Plugins
 # FIXME: Remove these tests.
 platform/mac/plugins/testplugin-onnew-onpaint.html [ Skip ]
@@ -2436,3 +2411,4 @@ fast/text/font-lookup-dot-prefix-case-sensitive.html [ Pass ]
 imported/w3c/web-platform-tests/xhr/event-timeout-order.any.worker.html [ Failure ]
 
 webkit.org/b/237166 [ BigSur+ ] webgl/pending/conformance/textures/misc/tex-image-video-repeated.html [ Pass Timeout ]
+

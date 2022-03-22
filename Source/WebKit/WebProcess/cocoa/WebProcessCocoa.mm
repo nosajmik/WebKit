@@ -67,6 +67,7 @@
 #import <WebCore/HistoryController.h>
 #import <WebCore/HistoryItem.h>
 #import <WebCore/IOSurface.h>
+#import <WebCore/ImageDecoderCG.h>
 #import <WebCore/LocalizedDeviceModel.h>
 #import <WebCore/LocalizedStrings.h>
 #import <WebCore/LogInitialization.h>
@@ -289,11 +290,14 @@ void WebProcess::platformInitializeWebProcess(WebProcessCreationParameters& para
 
 #if HAVE(VIDEO_RESTRICTED_DECODING)
 #if PLATFORM(MAC)
-    SandboxExtension::consumePermanently(parameters.videoDecoderExtensionHandles);
-#elif USE(APPLE_INTERNAL_SDK)
-    if (parameters.restrictImageAndVideoDecoders)
-        restrictImageAndVideoDecoders();
+    SandboxExtension::consumePermanently(parameters.trustdExtensionHandle);
 #endif // PLATFORM(MAC)
+#if USE(APPLE_INTERNAL_SDK)
+    if (parameters.restrictImageAndVideoDecoders) {
+        ImageDecoderCG::enableRestrictedDecoding();
+        restrictImageAndVideoDecoders();
+    }
+#endif
 #endif // HAVE(VIDEO_RESTRICTED_DECODING)
 
     // Disable NSURLCache.
@@ -1150,12 +1154,6 @@ void WebProcess::handlePreferenceChange(const String& domain, const String& key,
 void WebProcess::notifyPreferencesChanged(const String& domain, const String& key, const std::optional<String>& encodedValue)
 {
     preferenceDidUpdate(domain, key, encodedValue);
-}
-
-void WebProcess::unblockPreferenceService(Vector<SandboxExtension::Handle>&& handleArray)
-{
-    SandboxExtension::consumePermanently(handleArray);
-    _CFPrefsSetDirectModeEnabled(false);
 }
 #endif
 

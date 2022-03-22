@@ -135,7 +135,6 @@ webkit.org/b/223862 accessibility/gtk/text-for-range-with-link.html [ Failure ]
 accessibility/model-element-attributes.html [ Skip ]
 
 # Tests failing with ATSPI implementation.
-webkit.org/b/235941 accessibility/gtk/no-notification-for-unrendered-iframe-children.html [ Failure ]
 webkit.org/b/235941 accessibility/gtk/text-at-offset-embedded-objects.html [ Failure ]
 webkit.org/b/235941 accessibility/gtk/text-at-offset-special-chars.html [ Failure ]
 webkit.org/b/235941 accessibility/gtk/caret-offsets.html [ Timeout ]
@@ -195,6 +194,9 @@ webkit.org/b/208988 webxr [ Skip ]
 
 # Crash on EWS bot.
 webrtc/vp8-then-h264-gpu-process-crash.html [ Skip ]
+
+# This test introduces flakiness due to issues with resetting WebPreferences.
+webkit.org/b/237181 fast/forms/validation-message-minimum-font-size.html [ Skip ]
 
 #//////////////////////////////////////////////////////////////////////////////////////////
 # End of Triaged Expectations
@@ -611,9 +613,6 @@ webkit.org/b/152620 css3/font-variant-all.html [ ImageOnlyFailure ]
 webkit.org/b/152620 css3/font-variant-petite-caps-synthesis.html [ ImageOnlyFailure ]
 webkit.org/b/152620 css3/font-variant-small-caps-synthesis.html [ ImageOnlyFailure ]
 
-# monitorWheelEvents doesn't work in this test.
-css3/scroll-snap/scroll-snap-wheel-event.html [ Skip ]
-
 # Requires ENABLE(SAMPLING_PROFILER)
 webkit.org/b/153466 inspector/sampling-profiler [ Skip ]
 
@@ -933,9 +932,6 @@ webkit.org/b/225921 printing/print-close-crash.html [ Crash ]
 #////////////////////////////////////////////////////////////////////////////////////////
 # End of Crashing tests
 #////////////////////////////////////////////////////////////////////////////////////////
-
-# Tests behavior specific to MediaSessionManagerCocoa
-media/audio-session-category.html [ Skip ]
 
 #////////////////////////////////////////////////////////////////////////////////////////
 # 4. FLAKY TESTS
@@ -1597,8 +1593,6 @@ webkit.org/b/168427 fast/scrolling/rtl-scrollbars-listbox.html [ ImageOnlyFailur
 webkit.org/b/168427 fast/scrolling/rtl-scrollbars-overflow-contents.html [ ImageOnlyFailure ]
 
 webkit.org/b/168552 fast/text/hyphenate-locale.html [ Failure ]
-
-webkit.org/b/171598 accessibility/gtk/menu-list-unfocused-notifications.html [ Failure ]
 
 webkit.org/b/172270 fast/text/font-interstitial-invisible-width-while-loading.html [ Failure ]
 

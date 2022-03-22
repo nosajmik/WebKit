@@ -80,7 +80,6 @@ void WebProcessCreationParameters::encode(IPC::Encoder& encoder) const
     encoder << shouldSuppressMemoryPressureHandler;
     encoder << shouldUseFontSmoothing;
     encoder << fontAllowList;
-    encoder << terminationTimeout;
     encoder << overrideLanguages;
 #if USE(GSTREAMER)
     encoder << gstreamerOptions;
@@ -167,7 +166,7 @@ void WebProcessCreationParameters::encode(IPC::Encoder& encoder) const
 
 #if HAVE(VIDEO_RESTRICTED_DECODING)
 #if PLATFORM(MAC)
-    encoder << videoDecoderExtensionHandles;
+    encoder << trustdExtensionHandle;
 #endif
     encoder << restrictImageAndVideoDecoders;
 #endif
@@ -213,6 +212,7 @@ void WebProcessCreationParameters::encode(IPC::Encoder& encoder) const
 #if USE(GLIB)
     encoder << applicationID;
     encoder << applicationName;
+    encoder << inspectorServerAddress;
 #endif
 
 #if USE(ATSPI)
@@ -309,8 +309,6 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
     if (!decoder.decode(parameters.shouldUseFontSmoothing))
         return false;
     if (!decoder.decode(parameters.fontAllowList))
-        return false;
-    if (!decoder.decode(parameters.terminationTimeout))
         return false;
     if (!decoder.decode(parameters.overrideLanguages))
         return false;
@@ -469,11 +467,11 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
 
 #if HAVE(VIDEO_RESTRICTED_DECODING)
 #if PLATFORM(MAC)
-    std::optional<Vector<SandboxExtension::Handle>> videoDecoderExtensionHandles;
-    decoder >> videoDecoderExtensionHandles;
-    if (!videoDecoderExtensionHandles)
+    std::optional<SandboxExtension::Handle> trustdExtensionHandle;
+    decoder >> trustdExtensionHandle;
+    if (!trustdExtensionHandle)
         return false;
-    parameters.videoDecoderExtensionHandles = WTFMove(*videoDecoderExtensionHandles);
+    parameters.trustdExtensionHandle = WTFMove(*trustdExtensionHandle);
 #endif
     std::optional<bool> restrictImageAndVideoDecoders;
     decoder >> restrictImageAndVideoDecoders;
@@ -577,6 +575,12 @@ bool WebProcessCreationParameters::decode(IPC::Decoder& decoder, WebProcessCreat
         return false;
     if (!decoder.decode(parameters.applicationName))
         return false;
+
+    std::optional<CString> inspectorServerAddress;
+    decoder >> inspectorServerAddress;
+    if (!inspectorServerAddress)
+        return false;
+    parameters.inspectorServerAddress = WTFMove(*inspectorServerAddress);
 #endif
 
 #if USE(ATSPI)

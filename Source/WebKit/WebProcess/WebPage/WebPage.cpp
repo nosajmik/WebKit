@@ -3558,9 +3558,15 @@ void WebPage::setLayerHostingMode(LayerHostingMode layerHostingMode)
         pluginView->setLayerHostingMode(m_layerHostingMode);
 }
 
+#if ENABLE(CONTENT_FILTERING_IN_NETWORKING_PROCESS)
+void WebPage::didReceivePolicyDecision(FrameIdentifier frameID, uint64_t listenerID, PolicyDecision&& policyDecision)
+#else
 void WebPage::didReceivePolicyDecision(FrameIdentifier frameID, uint64_t listenerID, PolicyDecision&& policyDecision, const Vector<SandboxExtension::Handle>& networkExtensionsHandles)
+#endif
 {
+#if !ENABLE(CONTENT_FILTERING_IN_NETWORKING_PROCESS)
     consumeNetworkExtensionSandboxExtensions(networkExtensionsHandles);
+#endif
 
     WebFrame* frame = WebProcess::singleton().webFrame(frameID);
     WEBPAGE_RELEASE_LOG(Loading, "didReceivePolicyDecision: policyAction=%u - frameID=%llu - webFrame=%p - mainFrame=%d", (unsigned)policyDecision.policyAction, frameID.toUInt64(), frame, frame ? frame->isMainFrame() : 0);
@@ -3956,6 +3962,61 @@ bool WebPage::isParentProcessAWebBrowser() const
     return false;
 }
 
+static void adjustSettingsForCaptivePortal(Settings& settings, const WebPreferencesStore& store)
+{
+    settings.setWebGLEnabled(false);
+#if ENABLE(WEBGL2)
+    settings.setWebGL2Enabled(false);
+#endif
+#if ENABLE(GAMEPAD)
+    settings.setGamepadsEnabled(false);
+#endif
+#if ENABLE(WIRELESS_PLAYBACK_TARGET)
+    settings.setRemotePlaybackEnabled(false);
+#endif
+    settings.setFileSystemAccessEnabled(false);
+    settings.setAllowsPictureInPictureMediaPlayback(false);
+#if ENABLE(PICTURE_IN_PICTURE_API)
+    settings.setPictureInPictureAPIEnabled(false);
+#endif
+    settings.setSpeechRecognitionEnabled(false);
+#if ENABLE(NOTIFICATIONS)
+    settings.setNotificationsEnabled(false);
+#endif
+#if ENABLE(SERVICE_WORKER)
+    settings.setPushAPIEnabled(false);
+#endif
+#if ENABLE(WEBXR)
+    settings.setWebXREnabled(false);
+    settings.setWebXRAugmentedRealityModuleEnabled(false);
+#endif
+#if ENABLE(MODEL_ELEMENT)
+    settings.setModelElementEnabled(false);
+#endif
+#if ENABLE(MEDIA_STREAM)
+    settings.setMediaDevicesEnabled(false);
+#endif
+#if ENABLE(WEB_AUDIO)
+    settings.setWebAudioEnabled(false);
+#endif
+    settings.setDownloadableBinaryFontsEnabled(false);
+#if ENABLE(WEB_RTC)
+    settings.setPeerConnectionEnabled(false);
+#endif
+#if ENABLE(MATHML)
+    settings.setMathMLEnabled(false);
+#endif
+#if ENABLE(PDFJS)
+    settings.setPdfJSViewerEnabled(true);
+#endif
+
+    settings.setAllowedMediaContainerTypes(store.getStringValueForKey(WebPreferencesKey::mediaContainerTypesAllowedInCaptivePortalModeKey()));
+    settings.setAllowedMediaCodecTypes(store.getStringValueForKey(WebPreferencesKey::mediaCodecTypesAllowedInCaptivePortalModeKey()));
+    settings.setAllowedMediaVideoCodecIDs(store.getStringValueForKey(WebPreferencesKey::mediaVideoCodecIDsAllowedInCaptivePortalModeKey()));
+    settings.setAllowedMediaAudioCodecIDs(store.getStringValueForKey(WebPreferencesKey::mediaAudioCodecIDsAllowedInCaptivePortalModeKey()));
+    settings.setAllowedMediaCaptionFormatTypes(store.getStringValueForKey(WebPreferencesKey::mediaCaptionFormatTypesAllowedInCaptivePortalModeKey()));
+}
+
 void WebPage::updatePreferences(const WebPreferencesStore& store)
 {
     updatePreferencesGenerated(store);
@@ -4076,51 +4137,8 @@ void WebPage::updatePreferences(const WebPreferencesStore& store)
 
     // FIXME: This should be automated by adding a new field in WebPreferences*.yaml
     // that indicates override state for captive portal mode. https://webkit.org/b/233100.
-    if (WebProcess::singleton().isCaptivePortalModeEnabled()) {
-        settings.setWebGLEnabled(false);
-#if ENABLE(WEBGL2)
-        settings.setWebGL2Enabled(false);
-#endif
-#if ENABLE(GAMEPAD)
-        settings.setGamepadsEnabled(false);
-#endif
-#if ENABLE(WIRELESS_PLAYBACK_TARGET)
-        settings.setRemotePlaybackEnabled(false);
-#endif
-        settings.setFileSystemAccessEnabled(false);
-        settings.setAllowsPictureInPictureMediaPlayback(false);
-#if ENABLE(PICTURE_IN_PICTURE_API)
-        settings.setPictureInPictureAPIEnabled(false);
-#endif
-        settings.setSpeechRecognitionEnabled(false);
-#if ENABLE(NOTIFICATIONS)
-        settings.setNotificationsEnabled(false);
-#endif
-#if ENABLE(WEBXR)
-        settings.setWebXREnabled(false);
-        settings.setWebXRAugmentedRealityModuleEnabled(false);
-#endif
-#if ENABLE(MEDIA_STREAM)
-        settings.setMediaDevicesEnabled(false);
-#endif
-#if ENABLE(WEB_AUDIO)
-        settings.setWebAudioEnabled(false);
-#endif
-        settings.setDownloadableBinaryFontsEnabled(false);
-#if ENABLE(WEB_RTC)
-        settings.setPeerConnectionEnabled(false);
-#endif
-#if ENABLE(MATHML)
-        settings.setMathMLEnabled(false);
-#endif
-        settings.setPdfJSViewerEnabled(true);
-
-        settings.setAllowedMediaContainerTypes(store.getStringValueForKey(WebPreferencesKey::mediaContainerTypesAllowedInCaptivePortalModeKey()));
-        settings.setAllowedMediaCodecTypes(store.getStringValueForKey(WebPreferencesKey::mediaCodecTypesAllowedInCaptivePortalModeKey()));
-        settings.setAllowedMediaVideoCodecIDs(store.getStringValueForKey(WebPreferencesKey::mediaVideoCodecIDsAllowedInCaptivePortalModeKey()));
-        settings.setAllowedMediaAudioCodecIDs(store.getStringValueForKey(WebPreferencesKey::mediaAudioCodecIDsAllowedInCaptivePortalModeKey()));
-        settings.setAllowedMediaCaptionFormatTypes(store.getStringValueForKey(WebPreferencesKey::mediaCaptionFormatTypesAllowedInCaptivePortalModeKey()));
-    }
+    if (WebProcess::singleton().isCaptivePortalModeEnabled())
+        adjustSettingsForCaptivePortal(settings, store);
 
 #if ENABLE(ARKIT_INLINE_PREVIEW)
     m_useARKitForModel = store.getBoolValueForKey(WebPreferencesKey::useARKitForModelKey());
@@ -4914,9 +4932,9 @@ void WebPage::setOrientationForMediaCapture(uint64_t rotation)
     });
 }
 
-void WebPage::setMockCameraIsInterrupted(bool isInterrupted)
+void WebPage::setMockCaptureDevicesInterrupted(bool isCameraInterrupted, bool isMicrophoneInterrupted)
 {
-    MockRealtimeMediaSourceCenter::setMockCameraIsInterrupted(isInterrupted);
+    MockRealtimeMediaSourceCenter::setMockCaptureDevicesInterrupted(isCameraInterrupted, isMicrophoneInterrupted);
 }
 #endif // USE(GSTREAMER)
 
@@ -6079,14 +6097,25 @@ void WebPage::didChangeContents()
     sendEditorStateUpdate();
 }
 
-void WebPage::didChangeOverflowScrollPosition()
+void WebPage::didScrollSelection()
 {
     didChangeSelectionOrOverflowScrollPosition();
 }
 
-void WebPage::didChangeSelection()
+void WebPage::didChangeSelection(Frame& frame)
 {
     didChangeSelectionOrOverflowScrollPosition();
+
+#if PLATFORM(IOS_FAMILY)
+    if (!m_sendAutocorrectionContextAfterFocusingElement)
+        return;
+
+    if (UNLIKELY(!frame.document() || !frame.document()->hasLivingRenderTree() || frame.selection().isNone()))
+        return;
+
+    m_sendAutocorrectionContextAfterFocusingElement = false;
+    preemptivelySendAutocorrectionContext();
+#endif // PLATFORM(IOS_FAMILY)
 }
 
 void WebPage::didChangeSelectionOrOverflowScrollPosition()
@@ -6143,6 +6172,7 @@ void WebPage::resetFocusedElementForFrame(WebFrame* frame)
 
     if (frame->isMainFrame() || m_focusedElement->document().frame() == frame->coreFrame()) {
 #if PLATFORM(IOS_FAMILY)
+        m_sendAutocorrectionContextAfterFocusingElement = false;
         send(Messages::WebPageProxy::ElementDidBlur());
 #elif PLATFORM(MAC)
         send(Messages::WebPageProxy::SetEditableElementIsFocused(false));
@@ -6151,9 +6181,9 @@ void WebPage::resetFocusedElementForFrame(WebFrame* frame)
     }
 }
 
-void WebPage::elementDidRefocus(WebCore::Element& element)
+void WebPage::elementDidRefocus(Element& element, const FocusOptions& options)
 {
-    elementDidFocus(element);
+    elementDidFocus(element, options);
 
     if (m_userIsInteracting)
         scheduleFullEditorStateUpdate();
@@ -6176,7 +6206,7 @@ static bool isTextFormControlOrEditableContent(const WebCore::Element& element)
     return is<HTMLTextFormControlElement>(element) || element.hasEditableStyle();
 }
 
-void WebPage::elementDidFocus(WebCore::Element& element)
+void WebPage::elementDidFocus(Element& element, const FocusOptions& options)
 {
     if (!shouldDispatchUpdateAfterFocusingElement(element)) {
         updateInputContextAfterBlurringAndRefocusingElementIfNeeded(element);
@@ -6195,6 +6225,8 @@ void WebPage::elementDidFocus(WebCore::Element& element)
         if (element.document().fullscreenManager().isFullscreen())
             element.document().fullscreenManager().cancelFullscreen();
 #endif
+        if (m_userIsInteracting || m_keyboardIsAttached)
+            m_sendAutocorrectionContextAfterFocusingElement = true;
 
         auto information = focusedElementInformation();
         if (!information)
@@ -6204,6 +6236,7 @@ void WebPage::elementDidFocus(WebCore::Element& element)
 
         m_formClient->willBeginInputSession(this, &element, WebFrame::fromCoreFrame(*element.document().frame()), m_userIsInteracting, userData);
 
+        information->preventScroll = options.preventScroll;
         send(Messages::WebPageProxy::ElementDidFocus(information.value(), m_userIsInteracting, m_recentlyBlurredElement, m_lastActivityStateChanges, UserData(WebProcess::singleton().transformObjectsToHandles(userData.get()).get())));
 #elif PLATFORM(MAC)
         // FIXME: This can be unified with the iOS code above by bringing ElementDidFocus to macOS.
@@ -6229,6 +6262,9 @@ void WebPage::elementDidBlur(WebCore::Element& element)
             protectedThis->m_recentlyBlurredElement = nullptr;
         });
         m_hasPendingInputContextUpdateAfterBlurringAndRefocusingElement = false;
+#if PLATFORM(IOS_FAMILY)
+        m_sendAutocorrectionContextAfterFocusingElement = false;
+#endif
     }
 }
 
@@ -6438,6 +6474,11 @@ bool WebPage::canShowMIMEType(const String& mimeType, const Function<bool(const 
     if (pluginsSupport(mimeType, PluginData::OnlyApplicationPlugins))
         return true;
 
+#if ENABLE(PDFJS)
+    if (m_page->settings().pdfJSViewerEnabled() && MIMETypeRegistry::isPDFMIMEType(mimeType))
+        return true;
+#endif
+
     return false;
 }
 
@@ -6543,6 +6584,7 @@ void WebPage::didCommitLoad(WebFrame* frame)
     m_didUpdateRenderingAfterCommittingLoad = false;
 
 #if PLATFORM(IOS_FAMILY)
+    m_sendAutocorrectionContextAfterFocusingElement = false;
     m_hasReceivedVisibleContentRectsAfterDidCommitLoad = false;
     m_hasRestoredExposedContentRectAfterDidCommitLoad = false;
     m_lastTransactionIDWithScaleChange = firstTransactionIDAfterDidCommitLoad;
@@ -7327,10 +7369,10 @@ void WebPage::speakingErrorOccurred()
         observer->speakingErrorOccurred();
 }
 
-void WebPage::boundaryEventOccurred(bool wordBoundary, unsigned charIndex)
+void WebPage::boundaryEventOccurred(bool wordBoundary, unsigned charIndex, unsigned charLength)
 {
     if (auto observer = corePage()->speechSynthesisClient()->observer())
-        observer->boundaryEventOccurred(wordBoundary, charIndex);
+        observer->boundaryEventOccurred(wordBoundary, charIndex, charLength);
 }
 
 void WebPage::voicesDidChange()

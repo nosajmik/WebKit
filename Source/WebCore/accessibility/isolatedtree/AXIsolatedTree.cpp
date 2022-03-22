@@ -325,7 +325,9 @@ void AXIsolatedTree::updateNodeProperty(const AXCoreObject& axObject, AXProperty
         propertyMap.set(AXPropertyName::CurrentValue, axObject.currentValue().isolatedCopy());
         break;
     case AXPropertyName::IsChecked:
+        ASSERT(axObject.supportsCheckedState());
         propertyMap.set(AXPropertyName::IsChecked, axObject.isChecked());
+        propertyMap.set(AXPropertyName::ButtonState, axObject.checkboxOrRadioValue());
         break;
     case AXPropertyName::IsEnabled:
         propertyMap.set(AXPropertyName::IsEnabled, axObject.isEnabled());
@@ -403,7 +405,7 @@ void AXIsolatedTree::updateChildren(AXCoreObject& axObject)
             collectNodeChangesForSubtree(*newChildren[i], axAncestor->objectID(), true, changes, &idsBeingChanged);
         }
     }
-    m_nodeMap.set(axAncestor->objectID(), ParentChildrenIDs { oldIDs.parentID, newChildrenIDs });
+    m_nodeMap.set(axAncestor->objectID(), ParentChildrenIDs { oldIDs.parentID, WTFMove(newChildrenIDs) });
 
     // What is left in oldChildrenIDs are the IDs that are no longer children of axAncestor.
     // Thus, remove them from m_nodeMap and queue them to be removed from the tree.
@@ -421,9 +423,9 @@ void AXIsolatedTree::updateChildren(AXCoreObject& axObject)
 RefPtr<AXIsolatedObject> AXIsolatedTree::focusedNode()
 {
     AXTRACE("AXIsolatedTree::focusedNode");
+    RELEASE_ASSERT(!isMainThread());
     // Apply pending changes in case focus has changed and hasn't been updated.
     applyPendingChanges();
-    Locker locker { m_changeLogLock };
     AXLOG(makeString("focusedNodeID ", m_focusedNodeID.loggingString()));
     AXLOG("focused node:");
     AXLOG(nodeForID(m_focusedNodeID));
@@ -465,11 +467,10 @@ void AXIsolatedTree::setFocusedNodeID(AXID axID)
 void AXIsolatedTree::updateLoadingProgress(double newProgressValue)
 {
     AXTRACE("AXIsolatedTree::updateLoadingProgress");
-    AXLOG(makeString("Queueing loading progress update to ", newProgressValue, " for treeID ", treeID()));
+    AXLOG(makeString("Updating loading progress to ", newProgressValue, " for treeID ", treeID()));
     ASSERT(isMainThread());
 
-    Locker locker { m_changeLogLock };
-    m_pendingLoadingProgress = newProgressValue;
+    m_loadingProgress = newProgressValue;
 }
 
 void AXIsolatedTree::removeNode(const AXCoreObject& axObject)
@@ -530,8 +531,6 @@ void AXIsolatedTree::applyPendingChanges()
         return;
 
     Locker locker { m_changeLogLock };
-
-    m_loadingProgress = m_pendingLoadingProgress;
 
     if (m_pendingFocusedNodeID != m_focusedNodeID) {
         AXLOG(makeString("focusedNodeID ", m_focusedNodeID.loggingString(), " pendingFocusedNodeID ", m_pendingFocusedNodeID.loggingString()));

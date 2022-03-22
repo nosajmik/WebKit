@@ -33,7 +33,6 @@
 #import "ANGLEUtilitiesCocoa.h"
 #import "CVUtilities.h"
 #import "GraphicsContextGLIOSurfaceSwapChain.h"
-#import "GraphicsContextGLOpenGLManager.h"
 #import "Logging.h"
 #import "PixelBuffer.h"
 #import "ProcessIdentity.h"
@@ -42,6 +41,7 @@
 #import <Metal/Metal.h>
 #import <pal/spi/cocoa/MetalSPI.h>
 #import <wtf/BlockObjCExceptions.h>
+#import <wtf/darwin/WeakLinking.h>
 #import <wtf/text/CString.h>
 
 #if PLATFORM(IOS_FAMILY)
@@ -56,8 +56,10 @@
 
 #if ENABLE(MEDIA_STREAM)
 #import "ImageRotationSessionVT.h"
-#import "MediaSampleAVFObjC.h"
 #endif
+
+// Metal may not be available, for example in recovery OS.
+WTF_WEAK_LINK_FORCE_IMPORT(MTLCreateSystemDefaultDevice);
 
 namespace WebCore {
 
@@ -98,6 +100,22 @@ static bool checkVolatileContextSupportIfDeviceExists(EGLDisplay display, const 
 
 static bool platformSupportsMetal(bool isWebGL2)
 {
+    // FIXME: Figure out why WebKit runs in recovery system using -framework Metal, but seemingly cannot call into Metal.
+    // The hunk about runnningInRecoverySystem should be removed once it is clear how WebKit can link strongly to Metal
+    // but run without Metal.
+    static bool runningInRecoverySystem = [] {
+        if (getenv("__OSINSTALL_ENVIRONMENT")) {
+            WTFLogAlways("WebGL: Running in recovery. Has access to Metal: %s", !MTLCreateSystemDefaultDevice ? "no" : "yes");
+            return true;
+        }
+        return false;
+    }();
+    if (runningInRecoverySystem)
+        return false;
+
+    if (!MTLCreateSystemDefaultDevice)
+        return false;
+
     auto device = adoptNS(MTLCreateSystemDefaultDevice());
 
     if (device) {
@@ -121,10 +139,10 @@ static EGLDisplay initializeEGLDisplay(const GraphicsContextGLAttributes& attrs)
         WTFLogAlways("Failed to load ANGLE shared library.");
         return EGL_NO_DISPLAY;
     }
-
-    EGLint majorVersion = 0;
-    EGLint minorVersion = 0;
-    EGLDisplay display;
+#if ASSERT_ENABLED
+    const char* clientExtensions = EGL_QueryString(EGL_NO_DISPLAY, EGL_EXTENSIONS);
+    ASSERT(clientExtensions);
+#endif
 
     Vector<EGLint> displayAttributes;
 
@@ -141,26 +159,41 @@ static EGLDisplay initializeEGLDisplay(const GraphicsContextGLAttributes& attrs)
     }
 
     LOG(WebGL, "Attempting to use ANGLE's %s backend.", attrs.useMetal ? "Metal" : "OpenGL");
-    EGLNativeDisplayType nativeDisplay = GraphicsContextGLANGLE::defaultDisplay;
     if (attrs.useMetal) {
         displayAttributes.append(EGL_PLATFORM_ANGLE_TYPE_ANGLE);
         displayAttributes.append(EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE);
         // These properties are defined for EGL_ANGLE_power_preference as EGLContext attributes,
         // but Metal backend uses EGLDisplay attributes.
         auto powerPreference = attrs.effectivePowerPreference();
-        if (powerPreference == GraphicsContextGLAttributes::PowerPreference::LowPower) {
-            displayAttributes.append(EGL_POWER_PREFERENCE_ANGLE);
-            displayAttributes.append(EGL_LOW_POWER_ANGLE);
-        } else if (powerPreference == GraphicsContextGLAttributes::PowerPreference::HighPerformance) {
+        if (powerPreference == GraphicsContextGLAttributes::PowerPreference::HighPerformance) {
             displayAttributes.append(EGL_POWER_PREFERENCE_ANGLE);
             displayAttributes.append(EGL_HIGH_POWER_ANGLE);
+        } else {
+            if (powerPreference == GraphicsContextGLAttributes::PowerPreference::LowPower) {
+                displayAttributes.append(EGL_POWER_PREFERENCE_ANGLE);
+                displayAttributes.append(EGL_LOW_POWER_ANGLE);
+            }
+#if PLATFORM(MAC) || PLATFORM(MACCATALYST)
+            ASSERT(strstr(clientExtensions, "EGL_ANGLE_platform_angle_device_id"));
+            // If the power preference is default, use the GPU the context window is on.
+            // If the power preference is low power, and we know which GPU the context window is on,
+            // most likely the lowest power is the GPU that drives the context window, as that GPU
+            // is anyway already powered on.
+            if (attrs.windowGPUID) {
+                // EGL_PLATFORM_ANGLE_DEVICE_ID_*_ANGLE is the IOKit registry id on EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE.
+                displayAttributes.append(EGL_PLATFORM_ANGLE_DEVICE_ID_HIGH_ANGLE);
+                displayAttributes.append(static_cast<EGLAttrib>(attrs.windowGPUID >> 32));
+                displayAttributes.append(EGL_PLATFORM_ANGLE_DEVICE_ID_LOW_ANGLE);
+                displayAttributes.append(static_cast<EGLAttrib>(attrs.windowGPUID));
+            }
+#endif
         }
-    } else
-        nativeDisplay = GraphicsContextGLANGLE::defaultOpenGLDisplay;
-
+    }
     displayAttributes.append(EGL_NONE);
-    display = EGL_GetPlatformDisplayEXT(EGL_PLATFORM_ANGLE_ANGLE, reinterpret_cast<void*>(nativeDisplay), displayAttributes.data());
 
+    EGLDisplay display = EGL_GetPlatformDisplayEXT(EGL_PLATFORM_ANGLE_ANGLE, reinterpret_cast<void*>(EGL_DEFAULT_DISPLAY), displayAttributes.data());
+    EGLint majorVersion = 0;
+    EGLint minorVersion = 0;
     if (EGL_Initialize(display, &majorVersion, &minorVersion) == EGL_FALSE) {
         LOG(WebGL, "EGLDisplay Initialization failed.");
         return EGL_NO_DISPLAY;
@@ -423,12 +456,11 @@ bool GraphicsContextGLCocoa::platformInitialize()
     if (!attributes.useMetal && attributes.effectivePowerPreference() == GraphicsContextGLPowerPreference::HighPerformance)
         m_switchesGPUOnDisplayReconfiguration = true;
 #endif
-    return true;
+    return GraphicsContextGLANGLE::platformInitialize();
 }
 
 GraphicsContextGLANGLE::~GraphicsContextGLANGLE()
 {
-    GraphicsContextGLOpenGLManager::sharedManager().removeContext(this);
     if (makeContextCurrent()) {
         if (m_texture)
             GL_DeleteTextures(1, &m_texture);
@@ -749,7 +781,7 @@ std::optional<PixelBuffer> GraphicsContextGLANGLE::readCompositedResults()
 }
 
 #if ENABLE(MEDIA_STREAM)
-RefPtr<MediaSample> GraphicsContextGLCocoa::paintCompositedResultsToMediaSample()
+RefPtr<VideoFrame> GraphicsContextGLCocoa::paintCompositedResultsToVideoFrame()
 {
     auto &displayBuffer = m_swapChain.displayBuffer();
     if (!displayBuffer.surface || !displayBuffer.handle)
@@ -761,14 +793,15 @@ RefPtr<MediaSample> GraphicsContextGLCocoa::paintCompositedResultsToMediaSample(
     if (!pixelBuffer)
         return nullptr;
     // Mirror and rotate the pixel buffer explicitly, as WebRTC encoders cannot mirror.
-    if (!m_mediaSampleRotationSession)
-        m_mediaSampleRotationSession = makeUnique<ImageRotationSessionVT>(ImageRotationSessionVT::RotationProperties { true, false, 180 }, getInternalFramebufferSize(), ImageRotationSessionVT::IsCGImageCompatible::No);
+    auto size = getInternalFramebufferSize();
+    if (!m_mediaSampleRotationSession || m_mediaSampleRotationSessionSize != size)
+        m_mediaSampleRotationSession = makeUnique<ImageRotationSessionVT>(ImageRotationSessionVT::RotationProperties { true, false, 180 }, size, ImageRotationSessionVT::IsCGImageCompatible::No);
     auto mediaSamplePixelBuffer = m_mediaSampleRotationSession->rotate(pixelBuffer->get());
     if (!mediaSamplePixelBuffer)
         return nullptr;
     if (m_resourceOwner)
         setOwnershipIdentityForCVPixelBuffer(mediaSamplePixelBuffer.get(), m_resourceOwner);
-    return MediaSampleAVFObjC::createImageSample(WTFMove(mediaSamplePixelBuffer), MediaSampleAVFObjC::VideoRotation::None, false);
+    return VideoFrameCV::create({ }, false, VideoFrame::Rotation::None, WTFMove(mediaSamplePixelBuffer));
 }
 #endif
 

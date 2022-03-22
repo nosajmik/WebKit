@@ -164,8 +164,11 @@ typedef NS_ENUM(NSUInteger, ASCPublicKeyCredentialKind) {
 @property (nonatomic, nullable, copy) NSData *clientDataHash;
 @property (nonatomic, nullable, readonly, copy) NSString *userVerificationPreference;
 @property (nonatomic, nullable, copy) ASCWebAuthenticationExtensionsClientInputs *extensions;
+@property (nonatomic, nullable, copy) NSNumber *timeout;
 
 @property (nonatomic, nullable, readonly, copy) NSArray<ASCPublicKeyCredentialDescriptor *> *allowedCredentials;
+
+@property (nonatomic, nullable, copy) NSString *destinationSiteForCrossSiteAssertion;
 
 @end
 
@@ -192,6 +195,7 @@ typedef NS_OPTIONS(NSUInteger, ASCCredentialRequestTypes) {
 @property (nonatomic, nullable, copy) NSString *userVerificationPreference;
 @property (nonatomic, nullable, copy) NSString *attestationPreference;
 @property (nonatomic, nullable, copy) ASCWebAuthenticationExtensionsClientInputs *extensions;
+@property (nonatomic, nullable, copy) NSNumber *timeout;
 
 @property (nonatomic) BOOL shouldRequireResidentKey;
 @property (nonatomic, copy) NSArray<ASCPublicKeyCredentialDescriptor *> *excludedCredentials;
@@ -234,6 +238,13 @@ typedef NS_ENUM(NSInteger, ASCredentialRequestStyle) {
     ASCredentialRequestStyleAutoFill,
 };
 
+@class ASCGlobalFrameIdentifier;
+
+@interface ASCGlobalFrameIdentifier : NSObject <NSSecureCoding>
+@property (nonatomic, copy) NSNumber *webPageID;
+@property (nonatomic, copy) NSNumber *webFrameID;
+@end
+
 @interface ASCCredentialRequestContext : NSObject <NSSecureCoding>
 
 - (instancetype)init NS_UNAVAILABLE;
@@ -252,6 +263,7 @@ typedef NS_ENUM(NSInteger, ASCredentialRequestStyle) {
 
 @property (nonatomic) ASCredentialRequestStyle requestStyle;
 
+@property (nonatomic, nullable, copy) ASCGlobalFrameIdentifier *globalFrameID;
 @end
 
 @protocol ASCCredentialProtocol <NSObject, NSSecureCoding>
@@ -330,6 +342,8 @@ typedef NS_ENUM(NSInteger, ASCredentialRequestStyle) {
 
 - (void)performAutoFillAuthorizationRequestsForContext:(ASCCredentialRequestContext *)context withCompletionHandler:(void (^)(id <ASCCredentialProtocol> _Nullable credential, NSError * _Nullable error))completionHandler;
 #endif
+
+- (void)cancelCurrentRequest;
 
 @end
 

@@ -378,7 +378,7 @@ void RegistrationDatabase::schedulePushChanges(Vector<ServiceWorkerContextData>&
             updatedRegistrations.clear();
             removedRegistrations.clear();
         }
-        callOnMainThread([this, protectedThis = WTFMove(protectedThis), success, pushCounter, updatedRegistrations = WTFMove(updatedRegistrations).isolatedCopy(), removedRegistrations = WTFMove(removedRegistrations).isolatedCopy(), completionHandler = WTFMove(completionHandler)]() mutable {
+        callOnMainThread([this, protectedThis = WTFMove(protectedThis), success, pushCounter, updatedRegistrations = crossThreadCopy(WTFMove(updatedRegistrations)), removedRegistrations = crossThreadCopy(WTFMove(removedRegistrations)), completionHandler = WTFMove(completionHandler)]() mutable {
             if (!success && (pushCounter + 1) == m_pushCounter) {
                 // We retry writing once if no other change was pushed.
                 schedulePushChanges(WTFMove(updatedRegistrations), WTFMove(removedRegistrations), ShouldRetry::No, WTFMove(completionHandler));
@@ -484,13 +484,13 @@ bool RegistrationDatabase::doPushChanges(const Vector<ServiceWorkerContextData>&
         if (!mainScript)
             return false;
         HashMap<URL, ScriptBuffer> importedScripts;
-        for (auto& pair : data.scriptResourceMap) {
-            auto importedScript = scriptStorage.store(data.registration.key, pair.key, pair.value.script);
+        for (auto& [scriptURL, script] : data.scriptResourceMap) {
+            auto importedScript = scriptStorage.store(data.registration.key, scriptURL, script.script);
             ASSERT(importedScript);
             if (importedScript)
-                importedScripts.add(crossThreadCopy(pair.key), crossThreadCopy(importedScript));
+                importedScripts.add(crossThreadCopy(scriptURL), crossThreadCopy(WTFMove(importedScript)));
         }
-        callOnMainThread([this, protectedThis = Ref { *this }, serviceWorkerIdentifier = data.serviceWorkerIdentifier, mainScript = crossThreadCopy(mainScript), importedScripts = WTFMove(importedScripts)]() mutable {
+        callOnMainThread([this, protectedThis = Ref { *this }, serviceWorkerIdentifier = data.serviceWorkerIdentifier, mainScript = crossThreadCopy(WTFMove(mainScript)), importedScripts = WTFMove(importedScripts)]() mutable {
             if (m_store)
                 m_store->didSaveWorkerScriptsToDisk(serviceWorkerIdentifier, WTFMove(mainScript), WTFMove(importedScripts));
         });
@@ -605,7 +605,7 @@ String RegistrationDatabase::importRecords()
         auto registration = ServiceWorkerRegistrationData { WTFMove(*key), registrationIdentifier, WTFMove(scopeURL), *updateViaCache, lastUpdateCheckTime, std::nullopt, std::nullopt, WTFMove(serviceWorkerData) };
         auto contextData = ServiceWorkerContextData { std::nullopt, WTFMove(registration), workerIdentifier, WTFMove(script), WTFMove(*certificateInfo), WTFMove(*contentSecurityPolicy), WTFMove(*coep), WTFMove(referrerPolicy), WTFMove(scriptURL), *workerType, true, LastNavigationWasAppInitiated::Yes, WTFMove(scriptResourceMap), std::nullopt, WTFMove(*navigationPreloadState) };
 
-        callOnMainThread([protectedThis = Ref { *this }, contextData = contextData.isolatedCopy()]() mutable {
+        callOnMainThread([protectedThis = Ref { *this }, contextData = WTFMove(contextData).isolatedCopy()]() mutable {
             protectedThis->addRegistrationToStore(WTFMove(contextData));
         });
     }

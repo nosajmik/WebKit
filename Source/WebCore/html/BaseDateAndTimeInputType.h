@@ -101,7 +101,7 @@ private:
     // InputType functions:
     String visibleValue() const final;
     String sanitizeValue(const String&) const override;
-    void setValue(const String&, bool valueChanged, TextFieldEventBehavior) final;
+    void setValue(const String&, bool valueChanged, TextFieldEventBehavior, TextControlSetValueSelection) final;
     WallTime valueAsDate() const override;
     ExceptionOr<void> setValueAsDate(WallTime) const override;
     double valueAsDouble() const final;
@@ -114,7 +114,7 @@ private:
     bool isMouseFocusable() const final;
 
     void handleDOMActivateEvent(Event&) override;
-    void createShadowSubtreeAndUpdateInnerTextElementEditability(bool) final;
+    void createShadowSubtree() final;
     void destroyShadowSubtree() final;
     void updateInnerTextValue() final;
     bool hasCustomFocusLogic() const final;

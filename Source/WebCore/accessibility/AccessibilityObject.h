@@ -42,10 +42,6 @@
 #include <wtf/RetainPtr.h>
 #endif
 
-#if USE(ATK)
-#include <wtf/glib/GRefPtr.h>
-#endif
-
 #if PLATFORM(COCOA)
 
 OBJC_CLASS NSArray;
@@ -276,6 +272,9 @@ public:
     Element* element() const override;
     Node* node() const override { return nullptr; }
     RenderObject* renderer() const override { return nullptr; }
+    // Note: computeAccessibilityIsIgnored does not consider whether an object is ignored due to presence of modals.
+    // Use accessibilityIsIgnored as the word of law when determining if an object is ignored.
+    virtual bool computeAccessibilityIsIgnored() const { return true; }
     bool accessibilityIsIgnored() const override;
     AccessibilityObjectInclusion defaultObjectInclusion() const override;
     bool accessibilityIsIgnoredByDefault() const override;
@@ -370,6 +369,7 @@ public:
     AccessibilityObject* nextSiblingUnignored(int limit) const override;
     AccessibilityObject* previousSiblingUnignored(int limit) const override;
     AccessibilityObject* parentObject() const override { return nullptr; }
+    AccessibilityObject* displayContentsParent() const;
     AXCoreObject* parentObjectUnignored() const override;
     AccessibilityObject* parentObjectIfExists() const override { return nullptr; }
     static AccessibilityObject* firstAccessibleObjectFromNode(const Node*);
@@ -510,16 +510,16 @@ public:
 
     virtual void updateAccessibilityRole() { }
     const AccessibilityChildrenVector& children(bool updateChildrenIfNeeded = true) override;
-    void addChildren() override { }
-    void addChild(AXCoreObject*, DescendIfIgnored = DescendIfIgnored::Yes) override;
-    void insertChild(AXCoreObject*, unsigned, DescendIfIgnored = DescendIfIgnored::Yes) override;
-
-    bool canHaveChildren() const override { return true; }
+    virtual void addChildren() { }
+    enum class DescendIfIgnored : uint8_t { No, Yes };
+    virtual void addChild(AXCoreObject*, DescendIfIgnored = DescendIfIgnored::Yes);
+    virtual void insertChild(AXCoreObject*, unsigned, DescendIfIgnored = DescendIfIgnored::Yes);
+    virtual bool canHaveChildren() const { return true; }
     void updateChildrenIfNecessary() override;
-    void setNeedsToUpdateChildren() override { }
-    void setNeedsToUpdateSubtree() override { }
-    void clearChildren() override;
-    bool needsToUpdateChildren() const override { return false; }
+    virtual void setNeedsToUpdateChildren() { }
+    virtual void setNeedsToUpdateSubtree() { }
+    virtual void clearChildren();
+    virtual bool needsToUpdateChildren() const { return false; }
 #if PLATFORM(COCOA)
     void detachFromParent() override;
 #else
@@ -793,7 +793,6 @@ protected:
 
     void setIsIgnoredFromParentData(AccessibilityIsIgnoredFromParentData& data) override { m_isIgnoredFromParentData = data; }
 
-    virtual bool computeAccessibilityIsIgnored() const { return true; }
     bool isAccessibilityObject() const override { return true; }
 
     // If this object itself scrolls, return its ScrollableArea.
@@ -826,6 +825,12 @@ private:
     std::optional<SimpleRange> selectionRange() const;
     std::optional<SimpleRange> findTextRange(const Vector<String>& searchStrings, const SimpleRange& start, AccessibilitySearchTextDirection) const;
     std::optional<SimpleRange> visibleCharacterRange() const override;
+    std::optional<SimpleRange> visibleCharacterRangeInternal(const std::optional<SimpleRange>&, const FloatRect&, const IntRect&) const;
+    Vector<BoundaryPoint> previousLineStartBoundaryPoints(const VisiblePosition&, const SimpleRange&, unsigned) const;
+    std::optional<VisiblePosition> previousLineStartPositionInternal(const VisiblePosition&) const;
+    bool boundaryPointsContainedInRect(const BoundaryPoint&, const BoundaryPoint&, const FloatRect&) const;
+    std::optional<BoundaryPoint> lastBoundaryPointContainedInRect(const Vector<BoundaryPoint>&, const BoundaryPoint&, const FloatRect&, int, int) const;
+    std::optional<BoundaryPoint> lastBoundaryPointContainedInRect(const Vector<BoundaryPoint>& boundaryPoints, const BoundaryPoint& startBoundaryPoint, const FloatRect& targetRect) const;
 
     void ariaTreeRows(AccessibilityChildrenVector& rows, AccessibilityChildrenVector& ancestors);
     
@@ -842,16 +847,31 @@ private:
     AXID m_id;
     OptionSet<AXAncestorFlag> m_ancestorFlags;
     AccessibilityObjectInclusion m_lastKnownIsIgnoredValue { AccessibilityObjectInclusion::DefaultBehavior };
+    // std::nullopt is a valid cached value if this object has no visible characters.
+    mutable std::optional<SimpleRange> m_cachedVisibleCharacterRange;
+    // This is std::nullopt if we haven't cached any input yet.
+    mutable std::optional<std::tuple<std::optional<SimpleRange>, FloatRect, IntRect>> m_cachedVisibleCharacterRangeInputs;
 protected: // FIXME: Make the data members private.
     // FIXME: This can be replaced by AXAncestorFlags.
     AccessibilityIsIgnoredFromParentData m_isIgnoredFromParentData;
     bool m_childrenDirty { false };
     bool m_subtreeDirty { false };
-private:
-#if ENABLE(ACCESSIBILITY_ISOLATED_TREE)
-    bool m_isolatedTreeNodeInitialized { false };
-#endif
 };
+
+#if ENABLE(ACCESSIBILITY)
+inline std::optional<BoundaryPoint> AccessibilityObject::lastBoundaryPointContainedInRect(const Vector<BoundaryPoint>& boundaryPoints, const BoundaryPoint& startBoundaryPoint, const FloatRect& targetRect) const
+{
+    return lastBoundaryPointContainedInRect(boundaryPoints, startBoundaryPoint, targetRect, 0, boundaryPoints.size() - 1);
+}
+
+inline VisiblePosition AccessibilityObject::previousLineStartPosition(const VisiblePosition& position) const
+{
+    return previousLineStartPositionInternal(position).value_or(VisiblePosition());
+}
+#else
+inline std::optional<BoundaryPoint> AccessibilityObject::lastBoundaryPointContainedInRect(const Vector<BoundaryPoint>&, const BoundaryPoint&, const FloatRect&) const { return std::nullopt; }
+inline VisiblePosition AccessibilityObject::previousLineStartPosition(const VisiblePosition& position) const { return { }; }
+#endif
 
 #if !ENABLE(ACCESSIBILITY)
 inline const AccessibilityObject::AccessibilityChildrenVector& AccessibilityObject::children(bool) { return m_children; }
@@ -862,7 +882,7 @@ inline void AccessibilityObject::updateBackingStore() { }
 inline void AccessibilityObject::detachPlatformWrapper(AccessibilityDetachmentType) { }
 #endif
 
-#if !(ENABLE(ACCESSIBILITY) && (USE(ATK) || USE(ATSPI)))
+#if !(ENABLE(ACCESSIBILITY) && USE(ATSPI))
 inline bool AccessibilityObject::allowsTextRanges() const { return true; }
 inline unsigned AccessibilityObject::getLengthForTextRange() const { return text().length(); }
 #endif

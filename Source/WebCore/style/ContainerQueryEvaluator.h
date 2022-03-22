@@ -42,14 +42,16 @@ public:
 
     bool evaluate(const FilteredContainerQuery&) const;
 
-private:
-    struct ResolvedContainer;
-    std::optional<ResolvedContainer> resolveContainer(const FilteredContainerQuery&) const;
+    static const Element* selectContainer(OptionSet<CQ::Axis>, const String& name, const Element&, const CachedQueryContainers*, PseudoId = PseudoId::None);
 
-    EvaluationResult evaluateQuery(const CQ::ContainerQuery&, const ResolvedContainer&) const;
-    EvaluationResult evaluateQuery(const CQ::SizeQuery&, const ResolvedContainer&) const;
-    template<typename ConditionType> EvaluationResult evaluateCondition(const ConditionType&, const ResolvedContainer&) const;
-    EvaluationResult evaluateSizeFeature(const CQ::SizeFeature&, const ResolvedContainer&) const;
+private:
+    struct SelectedContainer;
+    std::optional<SelectedContainer> selectContainer(const FilteredContainerQuery&) const;
+
+    EvaluationResult evaluateQuery(const CQ::ContainerQuery&, const SelectedContainer&) const;
+    EvaluationResult evaluateQuery(const CQ::SizeQuery&, const SelectedContainer&) const;
+    template<typename ConditionType> EvaluationResult evaluateCondition(const ConditionType&, const SelectedContainer&) const;
+    EvaluationResult evaluateSizeFeature(const CQ::SizeFeature&, const SelectedContainer&) const;
 
     const Ref<const Element> m_element;
     const PseudoId m_pseudoId;
@@ -80,6 +82,7 @@ inline EvaluationResult operator!(EvaluationResult result)
     case EvaluationResult::Unknown:
         return EvaluationResult::Unknown;
     }
+    RELEASE_ASSERT_NOT_REACHED();
 }
 
 }

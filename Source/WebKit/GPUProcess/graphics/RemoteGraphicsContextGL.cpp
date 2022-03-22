@@ -118,7 +118,7 @@ void RemoteGraphicsContextGL::workQueueInitialize(WebCore::GraphicsContextGLAttr
     assertIsCurrent(workQueue());
     platformWorkQueueInitialize(WTFMove(attributes));
     if (m_context) {
-        m_context->addClient(*this);
+        m_context->setClient(this);
         String extensions = m_context->getString(GraphicsContextGL::EXTENSIONS);
         String requestableExtensions = m_context->getString(GraphicsContextGL::REQUESTABLE_EXTENSIONS_ANGLE);
         send(Messages::RemoteGraphicsContextGLProxy::WasCreated(true, remoteGraphicsContextGLStreamWorkQueue().wakeUpSemaphore(), extensions, requestableExtensions));
@@ -129,6 +129,7 @@ void RemoteGraphicsContextGL::workQueueInitialize(WebCore::GraphicsContextGLAttr
 void RemoteGraphicsContextGL::workQueueUninitialize()
 {
     assertIsCurrent(workQueue());
+    m_context->setClient(nullptr);
     m_context = nullptr;
     m_streamConnection = nullptr;
 }
@@ -142,11 +143,6 @@ void RemoteGraphicsContextGL::forceContextLost()
 {
     assertIsCurrent(workQueue());
     send(Messages::RemoteGraphicsContextGLProxy::WasLost());
-}
-
-void RemoteGraphicsContextGL::recycleContext()
-{
-    ASSERT_NOT_REACHED();
 }
 
 void RemoteGraphicsContextGL::dispatchContextChangedNotification()
@@ -224,11 +220,11 @@ void RemoteGraphicsContextGL::paintCompositedResultsToCanvasWithQualifiedIdentif
 }
 
 #if ENABLE(MEDIA_STREAM)
-void RemoteGraphicsContextGL::paintCompositedResultsToMediaSample(CompletionHandler<void(std::optional<WebKit::RemoteVideoFrameProxy::Properties>&&)>&& completionHandler)
+void RemoteGraphicsContextGL::paintCompositedResultsToVideoFrame(CompletionHandler<void(std::optional<WebKit::RemoteVideoFrameProxy::Properties>&&)>&& completionHandler)
 {
     assertIsCurrent(workQueue());
     std::optional<WebKit::RemoteVideoFrameProxy::Properties> result;
-    if (auto videoFrame = m_context->paintCompositedResultsToMediaSample())
+    if (auto videoFrame = m_context->paintCompositedResultsToVideoFrame())
         result = m_videoFrameObjectHeap->add(videoFrame.releaseNonNull());
     completionHandler(WTFMove(result));
 }
@@ -301,6 +297,20 @@ void RemoteGraphicsContextGL::simulateEventForTesting(WebCore::GraphicsContextGL
         return;
     }
     m_context->simulateEventForTesting(event);
+}
+
+void RemoteGraphicsContextGL::readnPixels0(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t format, uint32_t type, IPC::ArrayReference<uint8_t>&& data, CompletionHandler<void(IPC::ArrayReference<uint8_t>)>&& completionHandler)
+{
+    assertIsCurrent(workQueue());
+    Vector<uint8_t, 4> pixels(data);
+    m_context->readnPixels(x, y, width, height, format, type, pixels);
+    completionHandler(IPC::ArrayReference<uint8_t>(reinterpret_cast<uint8_t*>(pixels.data()), pixels.size()));
+}
+
+void RemoteGraphicsContextGL::readnPixels1(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t format, uint32_t type, uint64_t offset)
+{
+    assertIsCurrent(workQueue());
+    m_context->readnPixels(x, y, width, height, format, type, static_cast<GCGLintptr>(offset));
 }
 
 } // namespace WebKit

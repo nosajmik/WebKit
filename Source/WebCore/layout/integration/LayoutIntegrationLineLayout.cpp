@@ -54,8 +54,10 @@
 #include "RenderInline.h"
 #include "RenderLineBreak.h"
 #include "RenderListBox.h"
+#include "RenderListItem.h"
 #include "RenderListMarker.h"
 #include "RenderSlider.h"
+#include "RenderTable.h"
 #include "RenderTextControlMultiLine.h"
 #include "RenderTheme.h"
 #include "RenderView.h"
@@ -153,6 +155,30 @@ void LineLayout::updateReplacedDimensions(const RenderBox& replaced)
 void LineLayout::updateInlineBlockDimensions(const RenderBlock& inlineBlock)
 {
     updateLayoutBoxDimensions(inlineBlock);
+}
+
+void LineLayout::updateInlineTableDimensions(const RenderTable& inlineTable)
+{
+    updateLayoutBoxDimensions(inlineTable);
+}
+
+void LineLayout::updateListItemDimensions(const RenderListItem& listItem)
+{
+    updateLayoutBoxDimensions(listItem);
+}
+
+void LineLayout::updateListMarkerDimensions(const RenderListMarker& listMarker)
+{
+    updateLayoutBoxDimensions(listMarker);
+
+    auto& layoutBox = m_boxTree.layoutBoxForRenderer(listMarker);
+    if (layoutBox.isOutsideListMarker()) {
+        auto& rootGeometry = m_layoutState.geometryForRootBox();
+        auto& listMarkerGeometry = m_inlineFormattingState.boxGeometry(layoutBox);
+        auto horizontalMargin = listMarkerGeometry.horizontalMargin();
+        auto outsideOffset = rootGeometry.paddingStart().value_or(0_lu) + rootGeometry.borderStart();
+        listMarkerGeometry.setHorizontalMargin({ horizontalMargin.start - outsideOffset, horizontalMargin.end + outsideOffset });  
+    }
 }
 
 static inline LayoutUnit contentLogicalWidthForRenderer(const RenderBox& renderer)
@@ -264,11 +290,13 @@ void LineLayout::updateLayoutBoxDimensions(const RenderBox& replacedOrInlineBloc
     replacedBoxGeometry.setPadding(logicalPadding(replacedOrInlineBlock, isLeftToRightInlineDirection, writingMode));
 
     auto hasNonSyntheticBaseline = [&] {
+        if (is<RenderListMarker>(replacedOrInlineBlock))
+            return !downcast<RenderListMarker>(replacedOrInlineBlock).isImage();
         if (is<RenderReplaced>(replacedOrInlineBlock)
             || is<RenderListBox>(replacedOrInlineBlock)
             || is<RenderSlider>(replacedOrInlineBlock)
             || is<RenderTextControlMultiLine>(replacedOrInlineBlock)
-            || is<RenderListMarker>(replacedOrInlineBlock)
+            || is<RenderTable>(replacedOrInlineBlock)
 #if ENABLE(ATTACHMENT_ELEMENT)
             || is<RenderAttachment>(replacedOrInlineBlock)
 #endif
@@ -282,6 +310,10 @@ void LineLayout::updateLayoutBoxDimensions(const RenderBox& replacedOrInlineBloc
     }();
     if (hasNonSyntheticBaseline) {
         auto baseline = replacedOrInlineBlock.baselinePosition(AlphabeticBaseline, false /* firstLine */, writingMode == WritingMode::TopToBottom ? HorizontalLine : VerticalLine, PositionOnContainingLine);
+        if (is<RenderListMarker>(replacedOrInlineBlock)) {
+            ASSERT(!downcast<RenderListMarker>(replacedOrInlineBlock).isImage());
+            baseline = replacedOrInlineBlock.style().metricsOfPrimaryFont().ascent();
+        }
         replacedBox.setBaseline(roundToInt(baseline));
     }
 }
@@ -338,7 +370,6 @@ void LineLayout::layout()
         return;
 
     prepareLayoutState();
-    updateFormattingRootGeometryAndInvalidate();
     prepareFloatingState();
 
     // FIXME: Do not clear the lines and boxes here unconditionally, but consult with the damage object instead.
@@ -589,20 +620,20 @@ InlineIterator::InlineBoxIterator LineLayout::firstRootInlineBox() const
     return InlineIterator::inlineBoxFor(*m_inlineContent, m_inlineContent->boxes[0]);
 }
 
-InlineIterator::LineIterator LineLayout::firstLine() const
+InlineIterator::LineBoxIterator LineLayout::firstLineBox() const
 {
     if (!m_inlineContent)
         return { };
 
-    return { InlineIterator::LineIteratorModernPath(*m_inlineContent, 0) };
+    return { InlineIterator::LineBoxIteratorModernPath(*m_inlineContent, 0) };
 }
 
-InlineIterator::LineIterator LineLayout::lastLine() const
+InlineIterator::LineBoxIterator LineLayout::lastLineBox() const
 {
     if (!m_inlineContent)
         return { };
 
-    return { InlineIterator::LineIteratorModernPath(*m_inlineContent, m_inlineContent->lines.isEmpty() ? 0 : m_inlineContent->lines.size() - 1) };
+    return { InlineIterator::LineBoxIteratorModernPath(*m_inlineContent, m_inlineContent->lines.isEmpty() ? 0 : m_inlineContent->lines.size() - 1) };
 }
 
 LayoutRect LineLayout::firstInlineBoxRect(const RenderInline& renderInline) const
@@ -614,7 +645,7 @@ LayoutRect LineLayout::firstInlineBoxRect(const RenderInline& renderInline) cons
 
     // FIXME: We should be able to flip the display boxes soon after the root block
     // is finished sizing in one go.
-    auto firstBoxRect = Layout::toLayoutRect(firstBox->rect());
+    auto firstBoxRect = Layout::toLayoutRect(firstBox->visualRectIgnoringBlockDirection());
     switch (rootLayoutBox().style().writingMode()) {
     case WritingMode::TopToBottom:
     case WritingMode::LeftToRight:
@@ -664,7 +695,7 @@ Vector<FloatRect> LineLayout::collectInlineBoxRects(const RenderInline& renderIn
 
     Vector<FloatRect> result;
     m_inlineContent->traverseNonRootInlineBoxes(layoutBox, [&](auto& inlineBox) {
-        result.append(inlineBox.rect());
+        result.append(inlineBox.visualRectIgnoringBlockDirection());
     });
 
     return result;
@@ -811,7 +842,7 @@ bool LineLayout::hitTest(const HitTestRequest& request, HitTestResult& result, c
             continue;
         }
 
-        auto boxRect = flippedRectForWritingMode(flow(), box.rect());
+        auto boxRect = flippedRectForWritingMode(flow(), box.visualRectIgnoringBlockDirection());
         boxRect.moveBy(accumulatedOffset);
 
         if (!locationInContainer.intersects(boxRect))

@@ -48,10 +48,6 @@
 #include "AccessibilityObjectAtspi.h"
 #endif
 
-#if USE(ATK)
-#include <wtf/glib/GRefPtr.h>
-#endif
-
 #if PLATFORM(COCOA)
 OBJC_CLASS WebAccessibilityObjectWrapper;
 typedef WebAccessibilityObjectWrapper AccessibilityObjectWrapper;
@@ -60,9 +56,6 @@ typedef const struct __AXTextMarker* AXTextMarkerRef;
 typedef const struct __AXTextMarkerRange* AXTextMarkerRangeRef;
 #elif USE(ATSPI)
 typedef WebCore::AccessibilityObjectAtspi AccessibilityObjectWrapper;
-#elif USE(ATK)
-typedef struct _WebKitAccessible WebKitAccessible;
-typedef struct _WebKitAccessible AccessibilityObjectWrapper;
 #else
 class AccessibilityObjectWrapper;
 #endif
@@ -1266,22 +1259,8 @@ public:
     virtual void decrement() = 0;
 
     virtual const AccessibilityChildrenVector& children(bool updateChildrenIfNeeded = true) = 0;
-
-    enum class DescendIfIgnored : uint8_t {
-        No,
-        Yes
-    };
-    virtual void addChildren() = 0;
-    virtual void addChild(AXCoreObject*, DescendIfIgnored = DescendIfIgnored::Yes) = 0;
-    virtual void insertChild(AXCoreObject*, unsigned, DescendIfIgnored = DescendIfIgnored::Yes) = 0;
     Vector<AXID> childrenIDs(bool updateChildrenIfNecessary = true);
-
-    virtual bool canHaveChildren() const = 0;
     virtual void updateChildrenIfNecessary() = 0;
-    virtual void setNeedsToUpdateChildren() = 0;
-    virtual void setNeedsToUpdateSubtree() = 0;
-    virtual void clearChildren() = 0;
-    virtual bool needsToUpdateChildren() const = 0;
     virtual void detachFromParent() = 0;
     virtual bool isDetachedFromParent() = 0;
 
@@ -1556,8 +1535,6 @@ private:
     COMPtr<AccessibilityObjectWrapper> m_wrapper;
 #elif USE(ATSPI)
     RefPtr<AccessibilityObjectAtspi> m_wrapper;
-#elif USE(ATK)
-    GRefPtr<WebKitAccessible> m_wrapper;
 #endif
     virtual void detachPlatformWrapper(AccessibilityDetachmentType) = 0;
 };

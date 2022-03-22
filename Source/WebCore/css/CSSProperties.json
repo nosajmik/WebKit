@@ -1556,8 +1556,7 @@
                 "aliases": [
                     "-webkit-border-bottom-left-radius"
                 ],
-                "initial": "initialBorderRadius",
-                "custom": "Inherit|Value",
+                "custom": "All",
                 "logical-property-group": {
                     "name": "border-radius",
                     "resolver": "bottom-left"
@@ -1573,8 +1572,7 @@
                 "aliases": [
                     "-webkit-border-bottom-right-radius"
                 ],
-                "initial": "initialBorderRadius",
-                "custom": "Inherit|Value",
+                "custom": "All",
                 "logical-property-group": {
                     "name": "border-radius",
                     "resolver": "bottom-right"
@@ -2195,8 +2193,7 @@
                 "aliases": [
                     "-webkit-border-top-left-radius"
                 ],
-                "initial": "initialBorderRadius",
-                "custom": "Inherit|Value",
+                "custom": "All",
                 "logical-property-group": {
                     "name": "border-radius",
                     "resolver": "top-left"
@@ -2212,8 +2209,7 @@
                 "aliases": [
                     "-webkit-border-top-right-radius"
                 ],
-                "initial": "initialBorderRadius",
-                "custom": "Inherit|Value",
+                "custom": "All",
                 "logical-property-group": {
                     "name": "border-radius",
                     "resolver": "top-right"
@@ -3012,9 +3008,9 @@
             "inherited": true,
             "codegen-properties": {
                 "longhands": [
-                    "list-style-type",
                     "list-style-position",
-                    "list-style-image"
+                    "list-style-image",
+                    "list-style-type"
                 ]
             },
             "specification": {
@@ -4615,17 +4611,10 @@
             }
         },
         "text-decoration": {
-            "values": [
-                "underline",
-                "overline",
-                "line-through",
-                {
-                    "value": "blink",
-                    "status": "not considering"
-                }
-            ],
             "codegen-properties": {
-                "converter": "TextDecoration"
+                "longhands": [
+                    "text-decoration-line"
+                ]
             },
             "specification": {
                 "category": "css-22",
@@ -6848,12 +6837,20 @@
         },
         "text-decoration-line": {
             "codegen-properties": {
-                "name-for-methods": "TextDecoration",
-                "converter": "TextDecoration",
+                "converter": "TextDecorationLine",
                 "aliases": [
                     "-webkit-text-decoration-line"
                 ]
             },
+            "values": [
+                "underline",
+                "overline",
+                "line-through",
+                {
+                    "value": "blink",
+                    "status": "not considering"
+                }
+            ],
             "specification": {
                 "category": "css-text-decor",
                 "url": "https://www.w3.org/TR/css-text-decor-3/#text-decoration-line"

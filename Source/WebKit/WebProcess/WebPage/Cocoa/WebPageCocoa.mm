@@ -37,6 +37,7 @@
 #import "WebRemoteObjectRegistry.h"
 #import <pal/spi/cocoa/LaunchServicesSPI.h>
 #import <WebCore/DictionaryLookup.h>
+#import <WebCore/DocumentMarkerController.h>
 #import <WebCore/Editing.h>
 #import <WebCore/Editor.h>
 #import <WebCore/EventHandler.h>
@@ -56,6 +57,7 @@
 #import <WebCore/PlatformMediaSessionManager.h>
 #import <WebCore/Range.h>
 #import <WebCore/RenderElement.h>
+#import <WebCore/RenderedDocumentMarker.h>
 #import <WebCore/TextIterator.h>
 
 #if PLATFORM(IOS)
@@ -80,7 +82,9 @@ void WebPage::platformDidReceiveLoadParameters(const LoadParameters& parameters)
 {
     m_dataDetectionContext = parameters.dataDetectionContext;
 
+#if !ENABLE(CONTENT_FILTERING_IN_NETWORKING_PROCESS)
     consumeNetworkExtensionSandboxExtensions(parameters.networkExtensionSandboxExtensionHandles);
+#endif
 
 #if PLATFORM(IOS)
     if (parameters.contentFilterExtensionHandle)
@@ -245,6 +249,88 @@ void WebPage::insertDictatedTextAsync(const String& text, const EditingRange& re
         focusedElement->dispatchEvent(Event::create(eventNames().keyupEvent, Event::CanBubble::Yes, Event::IsCancelable::Yes));
         focusedElement->dispatchEvent(Event::create(eventNames().changeEvent, Event::CanBubble::Yes, Event::IsCancelable::Yes));
     }
+}
+
+void WebPage::addDictationAlternative(const String& text, DictationContext context, CompletionHandler<void(bool)>&& completion)
+{
+    Ref frame = CheckedRef(m_page->focusController())->focusedOrMainFrame();
+    RefPtr document = frame->document();
+    if (!document) {
+        completion(false);
+        return;
+    }
+
+    auto selection = frame->selection().selection();
+    RefPtr editableRoot = selection.rootEditableElement();
+    if (!editableRoot) {
+        completion(false);
+        return;
+    }
+
+    auto firstEditablePosition = firstPositionInNode(editableRoot.get());
+    auto selectionEnd = selection.end();
+    auto searchRange = makeSimpleRange(firstEditablePosition, selectionEnd);
+    if (!searchRange) {
+        completion(false);
+        return;
+    }
+
+    auto targetOffset = characterCount(*searchRange);
+    targetOffset -= std::min<uint64_t>(targetOffset, text.length());
+    auto matchRange = findClosestPlainText(*searchRange, text, { Backwards, DoNotRevealSelection }, targetOffset);
+    if (matchRange.collapsed()) {
+        completion(false);
+        return;
+    }
+
+    document->markers().addMarker(matchRange, DocumentMarker::DictationAlternatives, { DocumentMarker::DictationData { context, text } });
+    completion(true);
+}
+
+void WebPage::dictationAlternativesAtSelection(CompletionHandler<void(Vector<DictationContext>&&)>&& completion)
+{
+    Vector<DictationContext> contexts;
+    Ref frame = CheckedRef(m_page->focusController())->focusedOrMainFrame();
+    RefPtr document = frame->document();
+    if (!document) {
+        completion(WTFMove(contexts));
+        return;
+    }
+
+    auto selection = frame->selection().selection();
+    auto expandedSelectionRange = VisibleSelection { selection.visibleStart().previous(CannotCrossEditingBoundary), selection.visibleEnd().next(CannotCrossEditingBoundary) }.range();
+    if (!expandedSelectionRange) {
+        completion(WTFMove(contexts));
+        return;
+    }
+
+    auto markers = document->markers().markersInRange(*expandedSelectionRange, DocumentMarker::DictationAlternatives);
+    contexts.reserveInitialCapacity(markers.size());
+    for (auto* marker : markers) {
+        if (std::holds_alternative<DocumentMarker::DictationData>(marker->data()))
+            contexts.uncheckedAppend(std::get<DocumentMarker::DictationData>(marker->data()).context);
+    }
+    completion(WTFMove(contexts));
+}
+
+void WebPage::clearDictationAlternatives(Vector<DictationContext>&& contexts)
+{
+    Ref frame = CheckedRef(m_page->focusController())->focusedOrMainFrame();
+    RefPtr document = frame->document();
+    if (!document)
+        return;
+
+    HashSet<DictationContext> setOfContextsToRemove;
+    setOfContextsToRemove.reserveInitialCapacity(contexts.size());
+    for (auto context : contexts)
+        setOfContextsToRemove.add(context);
+
+    auto documentRange = makeRangeSelectingNodeContents(*document);
+    document->markers().filterMarkers(documentRange, [&] (auto& marker) {
+        if (!std::holds_alternative<DocumentMarker::DictationData>(marker.data()))
+            return FilterMarkerResult::Keep;
+        return setOfContextsToRemove.contains(std::get<WebCore::DocumentMarker::DictationData>(marker.data()).context) ? FilterMarkerResult::Remove : FilterMarkerResult::Keep;
+    }, DocumentMarker::DictationAlternatives);
 }
 
 void WebPage::accessibilityTransferRemoteToken(RetainPtr<NSData> remoteToken)
@@ -412,6 +498,7 @@ void WebPage::getPlatformEditorStateCommon(const Frame& frame, EditorState& resu
     postLayoutData.baseWritingDirection = frame.editor().baseWritingDirectionForSelectionStart();
 }
 
+#if !ENABLE(CONTENT_FILTERING_IN_NETWORKING_PROCESS)
 void WebPage::consumeNetworkExtensionSandboxExtensions(const Vector<SandboxExtension::Handle>& networkExtensionsHandles)
 {
 #if ENABLE(CONTENT_FILTERING)
@@ -421,6 +508,7 @@ void WebPage::consumeNetworkExtensionSandboxExtensions(const Vector<SandboxExten
     UNUSED_PARAM(networkExtensionsHandles);
 #endif
 }
+#endif
 
 void WebPage::getPDFFirstPageSize(WebCore::FrameIdentifier frameID, CompletionHandler<void(WebCore::FloatSize)>&& completionHandler)
 {

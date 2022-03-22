@@ -34,7 +34,6 @@
 #include "ANGLEWebKitBridge.h"
 #include "GLContext.h"
 #include "GraphicsContext.h"
-#include "GraphicsContextGLOpenGLManager.h"
 #include "ImageBuffer.h"
 #include "IntRect.h"
 #include "IntSize.h"
@@ -251,7 +250,6 @@ GraphicsContextGLOpenGL::GraphicsContextGLOpenGL(GraphicsContextGLAttributes att
 
 GraphicsContextGLOpenGL::~GraphicsContextGLOpenGL()
 {
-    GraphicsContextGLOpenGLManager::sharedManager().removeContext(this);
     bool success = makeContextCurrent();
     ASSERT_UNUSED(success, success);
     if (m_texture)
@@ -2339,24 +2337,6 @@ void GraphicsContextGLOpenGL::synthesizeGLError(GCGLenum error)
     m_syntheticErrors.add(error);
 }
 
-void GraphicsContextGLOpenGL::forceContextLost()
-{
-    for (auto* client : copyToVector(m_clients))
-        client->forceContextLost();
-}
-
-void GraphicsContextGLOpenGL::recycleContext()
-{
-    for (auto* client : copyToVector(m_clients))
-        client->recycleContext();
-}
-
-void GraphicsContextGLOpenGL::dispatchContextChangedNotification()
-{
-    for (auto* client : copyToVector(m_clients))
-        client->dispatchContextChangedNotification();
-}
-
 void GraphicsContextGLOpenGL::texImage2DDirect(GCGLenum target, GCGLint level, GCGLenum internalformat, GCGLsizei width, GCGLsizei height, GCGLint border, GCGLenum format, GCGLenum type, const void* pixels)
 {
     if (!makeContextCurrent())
@@ -3088,11 +3068,6 @@ void GraphicsContextGLOpenGL::ensureExtensionEnabled(const String& name)
 bool GraphicsContextGLOpenGL::isExtensionEnabled(const String& name)
 {
     return getExtensions().isEnabled(name);
-}
-
-GLint GraphicsContextGLOpenGL::getGraphicsResetStatusARB()
-{
-    return getExtensions().getGraphicsResetStatusARB();
 }
 
 void GraphicsContextGLOpenGL::drawBuffersEXT(GCGLSpan<const GCGLenum> buffers)

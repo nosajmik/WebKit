@@ -640,6 +640,20 @@ MouseEventsSimulationEnabled:
     WebKit:
       default: false
 
+MuteCameraOnMicrophoneInterruptionEnabled:
+  type: bool
+  humanReadableName: "Mute Camera on Microphone Interruption"
+  humanReadableDescription: "Mute Camera on Microphone Interruption"
+  condition: ENABLE(MEDIA_STREAM)
+  defaultValue:
+    WebKitLegacy:
+      default: false
+    WebKit:
+      "PLATFORM(IOS_FAMILY)": true
+      default: false
+    WebCore:
+      default: false
+
 NPAPIPlugInsEnabledForTestingInWebKitLegacy:
   type: bool
   humanReadableName: "NPAPI Plug-Ins Enabled In WebKitLegacy"
@@ -694,10 +708,12 @@ PdfJSViewerEnabled:
   type: bool
   humanReadableName: "Enable PDF.js viewer"
   humanReadableDescription: "Enable PDF.js viewer"
+  condition: ENABLE(PDFJS)
   defaultValue:
     WebKitLegacy:
       default: false
     WebKit:
+      "PLATFORM(GTK) || PLATFORM(WPE)": true
       default: false
     WebCore:
       default: false
@@ -728,6 +744,19 @@ PreferInlineTextSelectionInImages:
       default: true
     WebKit:
       "HAVE(UIKIT_WEBKIT_INTERNALS)": false
+      default: true
+
+PreferSandboxedMediaParsing:
+  type: bool
+  humanReadableName: "Prefer Sandboxed Parsing of Media"
+  humanReadableDescription: "Prefer parsing media out-of-process in a sandboxed service"
+  condition: ENABLE(VIDEO)
+  defaultValue:
+    WebCore:
+      default: true
+    WebKitLegacy:
+      default: true
+    WebKit:
       default: true
 
 ReplayCGDisplayListsIntoBackingStore:
@@ -1046,6 +1075,7 @@ WebRTCRemoteVideoFrameEnabled:
     WebKitLegacy:
       default: false
     WebKit:
+      "PLATFORM(COCOA)": true
       default: false
     WebCore:
       default: false

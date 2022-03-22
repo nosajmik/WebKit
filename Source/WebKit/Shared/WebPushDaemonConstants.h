@@ -27,6 +27,9 @@
 
 namespace WebKit::WebPushD {
 
+// If an origin processes more than this many silent pushes, then it will be unsubscribed from push.
+constexpr unsigned maxSilentPushCount = 3;
+
 constexpr const char* protocolVersionKey = "protocol version";
 constexpr uint64_t protocolVersionValue = 1;
 constexpr const char* protocolEncodedMessageKey = "encoded message";
@@ -48,7 +51,10 @@ enum class MessageType : uint8_t {
     SubscribeToPushService,
     UnsubscribeFromPushService,
     GetPushSubscription,
-    GetPushPermissionState
+    GetPushPermissionState,
+    IncrementSilentPushCount,
+    RemoveAllPushSubscriptions,
+    RemovePushSubscriptionsForOrigin,
 };
 
 inline bool messageTypeSendsReply(MessageType messageType)
@@ -65,9 +71,26 @@ inline bool messageTypeSendsReply(MessageType messageType)
     case MessageType::UnsubscribeFromPushService:
     case MessageType::GetPushSubscription:
     case MessageType::GetPushPermissionState:
+    case MessageType::IncrementSilentPushCount:
+    case MessageType::RemoveAllPushSubscriptions:
+    case MessageType::RemovePushSubscriptionsForOrigin:
         return true;
     case MessageType::SetDebugModeIsEnabled:
     case MessageType::UpdateConnectionConfiguration:
+        return false;
+    }
+    ASSERT_NOT_REACHED();
+    return false;
+}
+
+enum class DaemonMessageType : uint8_t {
+    DebugMessage = 1,
+};
+
+inline bool daemonMessageTypeSendsReply(DaemonMessageType messageType)
+{
+    switch (messageType) {
+    case DaemonMessageType::DebugMessage:
         return false;
     }
     ASSERT_NOT_REACHED();

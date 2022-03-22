@@ -232,6 +232,10 @@
 #include <wtf/linux/RealTimeThreads.h>
 #endif
 
+#if ENABLE(CONTENT_FILTERING_IN_NETWORKING_PROCESS)
+#include "WebMockContentFilterManager.h"
+#endif
+
 #undef WEBPROCESS_RELEASE_LOG
 #define RELEASE_LOG_SESSION_ID (m_sessionID ? m_sessionID->toUInt64() : 0)
 #if RELEASE_LOG_DISABLED
@@ -341,6 +345,10 @@ WebProcess::WebProcess()
 #endif
 
     Gigacage::forbidDisablingPrimitiveGigacage();
+
+#if ENABLE(CONTENT_FILTERING_IN_NETWORKING_PROCESS)
+    WebMockContentFilterManager::singleton().startObservingSettings();
+#endif
 }
 
 WebProcess::~WebProcess()
@@ -551,8 +559,6 @@ void WebProcess::initializeWebProcess(WebProcessCreationParameters&& parameters)
 
     setShouldUseFontSmoothing(parameters.shouldUseFontSmoothing);
 
-    setTerminationTimeout(parameters.terminationTimeout);
-
     setMemoryCacheDisabled(parameters.memoryCacheDisabled);
 
     WebCore::RuntimeEnabledFeatures::sharedFeatures().setAttrStyleEnabled(parameters.attrStyleEnabled);
@@ -695,9 +701,9 @@ void WebProcess::prewarmGlobally()
     WebCore::ProcessWarming::prewarmGlobally();
 }
 
-void WebProcess::prewarmWithDomainInformation(const WebCore::PrewarmInformation& prewarmInformation)
+void WebProcess::prewarmWithDomainInformation(WebCore::PrewarmInformation&& prewarmInformation)
 {
-    WebCore::ProcessWarming::prewarmWithInformation(prewarmInformation);
+    WebCore::ProcessWarming::prewarmWithInformation(WTFMove(prewarmInformation));
 }
 
 void WebProcess::registerURLSchemeAsEmptyDocument(const String& urlScheme)
@@ -2230,7 +2236,6 @@ RemoteMediaEngineConfigurationFactory& WebProcess::mediaEngineConfigurationFacto
     return *supplement<RemoteMediaEngineConfigurationFactory>();
 }
 #endif
-
 } // namespace WebKit
 
 #undef RELEASE_LOG_SESSION_ID

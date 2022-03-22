@@ -26,6 +26,7 @@
 #import "config.h"
 #import "BindGroupLayout.h"
 
+#import "APIConversions.h"
 #import "Device.h"
 
 namespace WebGPU {
@@ -112,19 +113,19 @@ static MTLArgumentDescriptor *createArgumentDescriptor(const WGPUStorageTextureB
     return descriptor;
 }
 
-RefPtr<BindGroupLayout> Device::createBindGroupLayout(const WGPUBindGroupLayoutDescriptor* descriptor)
+RefPtr<BindGroupLayout> Device::createBindGroupLayout(const WGPUBindGroupLayoutDescriptor& descriptor)
 {
-    if (descriptor->nextInChain)
+    if (descriptor.nextInChain)
         return nullptr;
 
-    NSMutableArray<MTLArgumentDescriptor *> *vertexArguments = [NSMutableArray arrayWithCapacity:descriptor->entryCount];
-    NSMutableArray<MTLArgumentDescriptor *> *fragmentArguments = [NSMutableArray arrayWithCapacity:descriptor->entryCount];
-    NSMutableArray<MTLArgumentDescriptor *> *computeArguments = [NSMutableArray arrayWithCapacity:descriptor->entryCount];
+    NSMutableArray<MTLArgumentDescriptor *> *vertexArguments = [NSMutableArray arrayWithCapacity:descriptor.entryCount];
+    NSMutableArray<MTLArgumentDescriptor *> *fragmentArguments = [NSMutableArray arrayWithCapacity:descriptor.entryCount];
+    NSMutableArray<MTLArgumentDescriptor *> *computeArguments = [NSMutableArray arrayWithCapacity:descriptor.entryCount];
     if (!vertexArguments || !fragmentArguments || !computeArguments)
         return nullptr;
 
-    for (uint32_t i = 0; i < descriptor->entryCount; ++i) {
-        const WGPUBindGroupLayoutEntry& entry = descriptor->entries[i];
+    for (uint32_t i = 0; i < descriptor.entryCount; ++i) {
+        const WGPUBindGroupLayoutEntry& entry = descriptor.entries[i];
         if (entry.nextInChain)
             return nullptr;
 
@@ -199,13 +200,13 @@ RefPtr<BindGroupLayout> Device::createBindGroupLayout(const WGPUBindGroupLayoutD
         [computeArguments addObject:computeDescriptor];
     }
 
-    id <MTLArgumentEncoder> vertexArgumentEncoder = [m_device newArgumentEncoderWithArguments:vertexArguments];
-    id <MTLArgumentEncoder> fragmentArgumentEncoder = [m_device newArgumentEncoderWithArguments:fragmentArguments];
-    id <MTLArgumentEncoder> computeArgumentEncoder = [m_device newArgumentEncoderWithArguments:computeArguments];
+    id<MTLArgumentEncoder> vertexArgumentEncoder = [m_device newArgumentEncoderWithArguments:vertexArguments];
+    id<MTLArgumentEncoder> fragmentArgumentEncoder = [m_device newArgumentEncoderWithArguments:fragmentArguments];
+    id<MTLArgumentEncoder> computeArgumentEncoder = [m_device newArgumentEncoderWithArguments:computeArguments];
     if (!vertexArgumentEncoder || !fragmentArgumentEncoder || !computeArgumentEncoder)
         return nullptr;
 
-    auto label = [NSString stringWithCString:descriptor->label encoding:NSUTF8StringEncoding];
+    auto label = fromAPI(descriptor.label);
     vertexArgumentEncoder.label = label;
     fragmentArgumentEncoder.label = label;
     computeArgumentEncoder.label = label;
@@ -213,7 +214,7 @@ RefPtr<BindGroupLayout> Device::createBindGroupLayout(const WGPUBindGroupLayoutD
     return BindGroupLayout::create(vertexArgumentEncoder, fragmentArgumentEncoder, computeArgumentEncoder);
 }
 
-BindGroupLayout::BindGroupLayout(id <MTLArgumentEncoder> vertexArgumentEncoder, id <MTLArgumentEncoder> fragmentArgumentEncoder, id <MTLArgumentEncoder> computeArgumentEncoder)
+BindGroupLayout::BindGroupLayout(id<MTLArgumentEncoder> vertexArgumentEncoder, id<MTLArgumentEncoder> fragmentArgumentEncoder, id<MTLArgumentEncoder> computeArgumentEncoder)
     : m_vertexArgumentEncoder(vertexArgumentEncoder)
     , m_fragmentArgumentEncoder(fragmentArgumentEncoder)
     , m_computeArgumentEncoder(computeArgumentEncoder)
@@ -222,9 +223,9 @@ BindGroupLayout::BindGroupLayout(id <MTLArgumentEncoder> vertexArgumentEncoder, 
 
 BindGroupLayout::~BindGroupLayout() = default;
 
-void BindGroupLayout::setLabel(const char* label)
+void BindGroupLayout::setLabel(String&& label)
 {
-    auto labelString = [NSString stringWithCString:label encoding:NSUTF8StringEncoding];
+    auto labelString = label;
     m_vertexArgumentEncoder.label = labelString;
     m_fragmentArgumentEncoder.label = labelString;
     m_computeArgumentEncoder.label = labelString;
@@ -238,14 +239,16 @@ NSUInteger BindGroupLayout::encodedLength() const
     return result;
 }
 
-}
+} // namespace WebGPU
+
+#pragma mark WGPU Stubs
 
 void wgpuBindGroupLayoutRelease(WGPUBindGroupLayout bindGroupLayout)
 {
-    delete bindGroupLayout;
+    WebGPU::fromAPI(bindGroupLayout).deref();
 }
 
 void wgpuBindGroupLayoutSetLabel(WGPUBindGroupLayout bindGroupLayout, const char* label)
 {
-    bindGroupLayout->bindGroupLayout->setLabel(label);
+    WebGPU::fromAPI(bindGroupLayout).setLabel(WebGPU::fromAPI(label));
 }

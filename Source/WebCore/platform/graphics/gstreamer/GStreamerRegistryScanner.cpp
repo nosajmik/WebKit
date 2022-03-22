@@ -330,12 +330,19 @@ void GStreamerRegistryScanner::initializeDecoders(const GStreamerRegistryScanner
         m_decoderMimeTypeSet.add(AtomString("video/x-m4v"));
     }
 
-    Vector<String> av1DecodersDisallowedList { "av1dec"_s };
-    if ((matroskaSupported || isContainerTypeSupported(Configuration::Decoding, "video/mp4")) && factories.hasElementForMediaType(ElementFactories::Type::VideoDecoder, "video/x-av1", ElementFactories::CheckHardwareClassifier::No, std::make_optional(WTFMove(av1DecodersDisallowedList)))) {
-        m_decoderCodecMap.add(AtomString("av01*"), false);
-        m_decoderCodecMap.add(AtomString("av1"), false);
-        m_decoderCodecMap.add(AtomString("x-av1"), false);
+    auto av1DecoderAvailable = factories.hasElementForMediaType(ElementFactories::Type::VideoDecoder, "video/x-av1", ElementFactories::CheckHardwareClassifier::Yes);
+    if ((matroskaSupported || isContainerTypeSupported(Configuration::Decoding, "video/mp4")) && av1DecoderAvailable) {
+        m_decoderCodecMap.add(AtomString("av01*"), av1DecoderAvailable.isUsingHardware);
+        m_decoderCodecMap.add(AtomString("av1"), av1DecoderAvailable.isUsingHardware);
+        m_decoderCodecMap.add(AtomString("x-av1"), av1DecoderAvailable.isUsingHardware);
     }
+
+    Vector<GstCapsWebKitMapping> mseCompatibleMapping = {
+        { ElementFactories::Type::AudioDecoder, "audio/x-ac3", { }, {"x-ac3", "ac-3", "ac3"} },
+        { ElementFactories::Type::AudioDecoder, "audio/x-eac3", {"audio/x-ac3"},  {"x-eac3", "ec3", "ec-3", "eac3"} },
+        { ElementFactories::Type::AudioDecoder, "audio/x-flac", {"audio/x-flac", "audio/flac"}, {"x-flac", "flac" } },
+    };
+    fillMimeTypeSetFromCapsMapping(factories, mseCompatibleMapping);
 
     if (m_isMediaSource)
         return;
@@ -344,10 +351,7 @@ void GStreamerRegistryScanner::initializeDecoders(const GStreamerRegistryScanner
 
     Vector<GstCapsWebKitMapping> mapping = {
         { ElementFactories::Type::AudioDecoder, "audio/midi", { "audio/midi", "audio/riff-midi" }, { } },
-        { ElementFactories::Type::AudioDecoder, "audio/x-ac3", { }, { } },
         { ElementFactories::Type::AudioDecoder, "audio/x-dts", { }, { } },
-        { ElementFactories::Type::AudioDecoder, "audio/x-eac3", { "audio/x-ac3" }, { } },
-        { ElementFactories::Type::AudioDecoder, "audio/x-flac", { "audio/x-flac", "audio/flac" }, { } },
         { ElementFactories::Type::AudioDecoder, "audio/x-sbc", { }, { } },
         { ElementFactories::Type::AudioDecoder, "audio/x-sid", { }, { } },
         { ElementFactories::Type::AudioDecoder, "audio/x-speex", { "audio/speex", "audio/x-speex" }, { } },

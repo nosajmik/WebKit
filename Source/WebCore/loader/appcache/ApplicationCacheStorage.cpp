@@ -567,7 +567,7 @@ void ApplicationCacheStorage::verifySchemaVersion()
     SQLiteTransaction setDatabaseVersion(m_database);
     setDatabaseVersion.begin();
 
-    auto statement = m_database.prepareStatementSlow(makeString("PRAGMA user_version=%", schemaVersion));
+    auto statement = m_database.prepareStatementSlow(makeString("PRAGMA user_version=", schemaVersion));
     if (!statement)
         return;
     
@@ -1054,8 +1054,8 @@ bool ApplicationCacheStorage::storeNewestCache(ApplicationCacheGroup& group)
 template<typename CharacterType>
 static inline void parseHeader(const CharacterType* header, unsigned headerLength, ResourceResponse& response)
 {
-    ASSERT(find(header, headerLength, ':') != notFound);
-    unsigned colonPosition = find(header, headerLength, ':');
+    ASSERT(WTF::find(header, headerLength, ':') != notFound);
+    unsigned colonPosition = WTF::find(header, headerLength, ':');
 
     // Save memory by putting the header names into atom strings so each is stored only once,
     // even though the setHTTPHeaderField function does not require an atom string.

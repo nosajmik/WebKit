@@ -350,9 +350,9 @@ void GPUProcessProxy::resetMockMediaDevices()
     send(Messages::GPUProcess::ResetMockMediaDevices { }, 0);
 }
 
-void GPUProcessProxy::setMockCameraIsInterrupted(bool isInterrupted)
+void GPUProcessProxy::setMockCaptureDevicesInterrupted(bool isCameraInterrupted, bool isMicrophoneInterrupted)
 {
-    send(Messages::GPUProcess::SetMockCameraIsInterrupted { isInterrupted }, 0);
+    send(Messages::GPUProcess::SetMockCaptureDevicesInterrupted { isCameraInterrupted, isMicrophoneInterrupted }, 0);
 }
 #endif // ENABLE(MEDIA_STREAM)
 
@@ -493,6 +493,8 @@ void GPUProcessProxy::didFinishLaunching(ProcessLauncher* launcher, IPC::Connect
     if (auto networkProcess = NetworkProcessProxy::defaultNetworkProcess())
         networkProcess->sendXPCEndpointToProcess(*this);
 #endif
+
+    beginResponsivenessChecks();
 }
 
 void GPUProcessProxy::updateProcessAssertion()
@@ -588,7 +590,7 @@ void GPUProcessProxy::terminateWebProcess(WebCore::ProcessIdentifier webProcessI
 #if HAVE(VISIBILITY_PROPAGATION_VIEW)
 void GPUProcessProxy::didCreateContextForVisibilityPropagation(WebPageProxyIdentifier webPageProxyID, WebCore::PageIdentifier pageID, LayerHostingContextID contextID)
 {
-    RELEASE_LOG(Process, "GPUProcessProxy::didCreateContextForVisibilityPropagation: webPageProxyID: %" PRIu64 ", pagePID: %" PRIu64 ", contextID: %d", webPageProxyID.toUInt64(), pageID.toUInt64(), contextID);
+    RELEASE_LOG(Process, "GPUProcessProxy::didCreateContextForVisibilityPropagation: webPageProxyID: %" PRIu64 ", pagePID: %" PRIu64 ", contextID: %u", webPageProxyID.toUInt64(), pageID.toUInt64(), contextID);
     auto* page = WebProcessProxy::webPage(webPageProxyID);
     if (!page) {
         RELEASE_LOG(Process, "GPUProcessProxy::didCreateContextForVisibilityPropagation() No WebPageProxy with this identifier");
@@ -679,6 +681,12 @@ void GPUProcessProxy::updatePreferences(WebProcessProxy& webProcess)
         }
 #endif
 
+#if HAVE(AVCONTENTKEYSPECIFIER)
+        if (!m_hasEnabledSampleBufferContentKeySessionSupport && preferences.sampleBufferContentKeySessionSupportEnabled()) {
+            m_hasEnabledSampleBufferContentKeySessionSupport = true;
+            send(Messages::GPUProcess::SetSampleBufferContentKeySessionSupportEnabled(m_hasEnabledSampleBufferContentKeySessionSupport), 0);
+        }
+#endif
     }
 }
 

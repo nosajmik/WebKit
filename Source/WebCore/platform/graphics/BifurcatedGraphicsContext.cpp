@@ -116,14 +116,18 @@ void BifurcatedGraphicsContext::strokePath(const Path& path)
 
 void BifurcatedGraphicsContext::beginTransparencyLayer(float opacity)
 {
+    GraphicsContext::beginTransparencyLayer(opacity);
     m_primaryContext.beginTransparencyLayer(opacity);
     m_secondaryContext.beginTransparencyLayer(opacity);
+    m_state.didBeginTransparencyLayer();
 }
 
 void BifurcatedGraphicsContext::endTransparencyLayer()
 {
+    GraphicsContext::endTransparencyLayer();
     m_primaryContext.endTransparencyLayer();
     m_secondaryContext.endTransparencyLayer();
+    m_state.didEndTransparencyLayer(m_primaryContext.alpha());
 }
 
 void BifurcatedGraphicsContext::applyDeviceScaleFactor(float factor)
@@ -261,6 +265,12 @@ void BifurcatedGraphicsContext::drawNativeImage(NativeImage& nativeImage, const 
 {
     m_primaryContext.drawNativeImage(nativeImage, selfSize, destRect, srcRect, options);
     m_secondaryContext.drawNativeImage(nativeImage, selfSize, destRect, srcRect, options);
+}
+
+void BifurcatedGraphicsContext::drawSystemImage(SystemImage& systemImage, const FloatRect& destinationRect)
+{
+    m_primaryContext.drawSystemImage(systemImage, destinationRect);
+    m_secondaryContext.drawSystemImage(systemImage, destinationRect);
 }
 
 void BifurcatedGraphicsContext::drawPattern(NativeImage& nativeImage, const FloatRect& destRect, const FloatRect& tileRect, const AffineTransform& patternTransform, const FloatPoint& phase, const FloatSize& spacing, const ImagePaintingOptions& options)
@@ -424,13 +434,14 @@ bool BifurcatedGraphicsContext::supportsInternalLinks() const
     return m_primaryContext.supportsInternalLinks();
 }
 
-void BifurcatedGraphicsContext::didUpdateState(const GraphicsContextState& state, GraphicsContextState::StateChangeFlags flags)
+void BifurcatedGraphicsContext::didUpdateState(GraphicsContextState& state)
 {
     // This calls updateState() instead of didUpdateState() so that changes
     // are also applied to each context's GraphicsContextState, so that code
     // internal to the child contexts that reads from the state gets the right values.
-    m_primaryContext.updateState(state, flags);
-    m_secondaryContext.updateState(state, flags);
+    m_primaryContext.updateState(state);
+    m_secondaryContext.updateState(state);
+    state.didApplyChanges();
 }
 
 #if OS(WINDOWS) && !USE(CAIRO)

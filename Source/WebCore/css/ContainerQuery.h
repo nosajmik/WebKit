@@ -24,11 +24,14 @@
 
 #pragma once
 
+#include <wtf/Forward.h>
+#include <wtf/OptionSet.h>
 #include <wtf/text/AtomString.h>
 
 namespace WebCore {
 
 class CSSValue;
+class Element;
 
 namespace CQ {
 
@@ -74,13 +77,24 @@ const AtomString& aspectRatio();
 const AtomString& orientation();
 };
 
+enum class Axis : uint8_t {
+    Block   = 1 << 0,
+    Inline  = 1 << 1,
+    Width   = 1 << 2,
+    Height  = 1 << 3,
+};
+OptionSet<Axis> requiredAxesForFeature(const AtomString&);
+
 }
 
 using ContainerQuery = CQ::ContainerQuery;
 
 struct FilteredContainerQuery {
     AtomString nameFilter;
+    OptionSet<CQ::Axis> axisFilter;
     ContainerQuery query;
 };
+
+using CachedQueryContainers = Vector<Ref<const Element>>;
 
 }

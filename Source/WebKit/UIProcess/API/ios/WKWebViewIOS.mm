@@ -35,6 +35,7 @@
 #import "RemoteLayerTreeScrollingPerformanceData.h"
 #import "RemoteLayerTreeViews.h"
 #import "RemoteScrollingCoordinatorProxy.h"
+#import "ScrollingTreeScrollingNodeDelegateIOS.h"
 #import "TapHandlingResult.h"
 #import "VideoFullscreenManagerProxy.h"
 #import "ViewGestureController.h"
@@ -60,6 +61,7 @@
 #import <WebCore/LocalCurrentTraitCollection.h>
 #import <WebCore/MIMETypeRegistry.h>
 #import <WebCore/RuntimeApplicationChecks.h>
+#import <WebCore/WebCoreUIColorExtras.h>
 #import <pal/spi/cocoa/QuartzCoreSPI.h>
 #import <pal/spi/ios/GraphicsServicesSPI.h>
 #import <wtf/BlockPtr.h>
@@ -541,7 +543,7 @@ static WebCore::Color scrollViewBackgroundColor(WKWebView *webView, AllowPageBac
 
     if (!color.isValid()) {
 #if HAVE(OS_DARK_MODE_SUPPORT)
-        color = WebCore::roundAndClampToSRGBALossy(UIColor.systemBackgroundColor.CGColor);
+        color = WebCore::roundAndClampToSRGBALossy(WebCore::systemBackgroundColor().CGColor);
 #else
         color = WebCore::Color::white;
 #endif
@@ -777,6 +779,13 @@ static WebCore::Color scrollViewBackgroundColor(WKWebView *webView, AllowPageBac
 
     if (![self _scrollViewIsRubberBandingForRefreshControl])
         [_scrollView _stopScrollingAndZoomingAnimations];
+
+#if HAVE(UIFINDINTERACTION)
+    if (_findInteractionEnabled) {
+        [_findInteraction dismissFindNavigator];
+        [_findInteraction setSearchableObject:[self _searchableObject]];
+    }
+#endif
 }
 
 static CGPoint contentOffsetBoundedInValidRange(UIScrollView *scrollView, CGPoint contentOffset)
@@ -864,6 +873,8 @@ static void changeContentOffsetBoundedInValidRange(UIScrollView *scrollView, Web
     [_scrollView setMinimumZoomScale:layerTreeTransaction.minimumScaleFactor()];
     [_scrollView setMaximumZoomScale:layerTreeTransaction.maximumScaleFactor()];
     [_scrollView _setZoomEnabledInternal:layerTreeTransaction.allowsUserScaling()];
+    auto rootNode = _page->scrollingCoordinatorProxy()->rootNode();
+    WebKit::ScrollingTreeScrollingNodeDelegateIOS::updateScrollViewForOverscrollBehavior(_scrollView.get(), rootNode->horizontalOverscrollBehavior(), rootNode->verticalOverscrollBehavior(), WebKit::ScrollingTreeScrollingNodeDelegateIOS::AllowOverscrollToPreventScrollPropagation::No);
 
     bool hasDockedInputView = !CGRectIsEmpty(_inputViewBoundsInWindow);
     bool isZoomed = layerTreeTransaction.pageScaleFactor() > layerTreeTransaction.initialScaleFactor();
@@ -2708,6 +2719,18 @@ static WebCore::UserInterfaceLayoutDirection toUserInterfaceLayoutDirection(UISe
     [super buildMenuWithBuilder:builder];
 }
 
+#if HAVE(UIFINDINTERACTION)
+
+- (id<_UITextSearching>)_searchableObject
+{
+    if ([_customContentView conformsToProtocol:@protocol(_UITextSearching)])
+        return (id<_UITextSearching>)_customContentView.get();
+
+    return _contentView.get();
+}
+
+#endif
+
 @end
 
 @implementation WKWebView (WKPrivateIOS)
@@ -3548,7 +3571,7 @@ static std::optional<WebCore::ViewportArguments> viewportArgumentsFromDictionary
         if (enabled) {
             if (!_findInteraction) {
                 _findInteraction = adoptNS([[_UIFindInteraction alloc] init]);
-                [_findInteraction setSearchableObject:_contentView.get()];
+                [_findInteraction setSearchableObject:[self _searchableObject]];
             }
 
             [self addInteraction:_findInteraction.get()];

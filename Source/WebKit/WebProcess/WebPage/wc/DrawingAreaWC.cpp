@@ -193,9 +193,11 @@ static void flushLayerImageBuffers(WCUpateInfo& info)
 {
     for (auto& layerInfo : info.changedLayers) {
         if (layerInfo.changes & WCLayerChange::Background) {
-            if (auto image = layerInfo.backingStore.imageBuffer()) {
-                if (auto flusher = image->createFlusher())
-                    flusher->flush();
+            for (auto& tileUpdate : layerInfo.tileUpdate) {
+                if (auto image = tileUpdate.backingStore.imageBuffer()) {
+                    if (auto flusher = image->createFlusher())
+                        flusher->flush();
+                }
             }
         }
     }
@@ -251,7 +253,9 @@ void DrawingAreaWC::sendUpdateAC()
         RunLoop::main().dispatch([this, weakThis = WTFMove(weakThis), stateID, updateInfo = WTFMove(updateInfo)]() mutable {
             if (!weakThis)
                 return;
-            m_remoteWCLayerTreeHostProxy->update(WTFMove(updateInfo), [this, stateID](std::optional<UpdateInfo> updateInfo) {
+            m_remoteWCLayerTreeHostProxy->update(WTFMove(updateInfo), [this, weakThis = WTFMove(weakThis), stateID](std::optional<UpdateInfo> updateInfo) {
+                if (!weakThis)
+                    return;
                 if (updateInfo && stateID == m_backingStoreStateID) {
                     send(Messages::DrawingAreaProxy::Update(m_backingStoreStateID, WTFMove(*updateInfo)));
                     return;

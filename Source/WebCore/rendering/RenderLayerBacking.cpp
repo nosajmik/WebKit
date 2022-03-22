@@ -1108,7 +1108,9 @@ bool RenderLayerBacking::updateConfiguration(const RenderLayer* compositingAnces
         if (element->usesPlatformLayer())
             m_graphicsLayer->setContentsToPlatformLayer(element->platformLayer(), GraphicsLayer::ContentsLayerPurpose::Model);
         else if (auto model = element->model())
-            m_graphicsLayer->setContentsToModel(WTFMove(model));
+            m_graphicsLayer->setContentsToModel(WTFMove(model), element->isInteractive() ? GraphicsLayer::ModelInteraction::Enabled : GraphicsLayer::ModelInteraction::Disabled);
+
+        element->sizeMayHaveChanged();
 
         layerConfigChanged = true;
     }
@@ -1518,11 +1520,8 @@ void RenderLayerBacking::updateGeometry(const RenderLayer* compositedAncestor)
         setContentsNeedDisplay();
 
 #if ENABLE(MODEL_ELEMENT)
-    if (is<RenderModel>(renderer())) {
-        auto* element = downcast<HTMLModelElement>(renderer().element());
-        if (element->usesPlatformLayer())
-            element->sizeMayHaveChanged();
-    }
+    if (is<RenderModel>(renderer()))
+        downcast<HTMLModelElement>(renderer().element())->sizeMayHaveChanged();
 #endif
 }
 
@@ -3324,7 +3323,7 @@ static RefPtr<Pattern> patternForDescription(PatternDescription description, Flo
 {
     const FloatSize tileSize { 32, 18 };
 
-    auto imageBuffer = destContext.createCompatibleImageBuffer(tileSize);
+    auto imageBuffer = destContext.createAlignedImageBuffer(tileSize);
     if (!imageBuffer)
         return nullptr;
 

@@ -181,6 +181,43 @@ WTF_DECLARE_CF_TYPE_TRAIT(CGImage);
 @end
 #endif
 
+// We use a WKMouseTrackingObserver as tracking area owner instead of the WKWebView. This is because WKWebView
+// gets an implicit tracking area when it is first responder and we only want to process mouse events from our
+// tracking area. Otherwise, it would lead to duplicate mouse events (rdar://88025610).
+@interface WKMouseTrackingObserver : NSObject
+@end
+
+@implementation WKMouseTrackingObserver {
+    WeakPtr<WebKit::WebViewImpl> _impl;
+}
+
+- (instancetype)initWithViewImpl:(WebKit::WebViewImpl&)impl
+{
+    if ((self = [super init]))
+        _impl = impl;
+    return self;
+}
+
+- (void)mouseMoved:(NSEvent *)event
+{
+    if (_impl)
+        _impl->mouseMoved(event);
+}
+
+- (void)mouseEntered:(NSEvent *)event
+{
+    if (_impl)
+        _impl->mouseEntered(event);
+}
+
+- (void)mouseExited:(NSEvent *)event
+{
+    if (_impl)
+        _impl->mouseExited(event);
+}
+
+@end
+
 #if ENABLE(IMAGE_ANALYSIS)
 
 namespace WebKit {
@@ -1487,7 +1524,8 @@ WebViewImpl::WebViewImpl(NSView <WebViewImplDelegate> *view, WKWebView *outerWeb
     , m_undoTarget(adoptNS([[WKEditorUndoTarget alloc] init]))
     , m_windowVisibilityObserver(adoptNS([[WKWindowVisibilityObserver alloc] initWithView:view impl:*this]))
     , m_accessibilitySettingsObserver(adoptNS([[WKAccessibilitySettingsObserver alloc] initWithImpl:*this]))
-    , m_primaryTrackingArea(adoptNS([[NSTrackingArea alloc] initWithRect:view.frame options:trackingAreaOptions() owner:view userInfo:nil]))
+    , m_mouseTrackingObserver(adoptNS([[WKMouseTrackingObserver alloc] initWithViewImpl:*this]))
+    , m_primaryTrackingArea(adoptNS([[NSTrackingArea alloc] initWithRect:view.frame options:trackingAreaOptions() owner:m_mouseTrackingObserver.get() userInfo:nil]))
 {
     static_cast<PageClientImpl&>(*m_pageClient).setImpl(*this);
 
@@ -2790,9 +2828,7 @@ void WebViewImpl::handleAcceptedAlternativeText(const String& acceptedAlternativ
 
 NSInteger WebViewImpl::spellCheckerDocumentTag()
 {
-    if (!m_spellCheckerDocumentTag)
-        m_spellCheckerDocumentTag = [NSSpellChecker uniqueSpellDocumentTag];
-    return m_spellCheckerDocumentTag.value();
+    return m_page->spellDocumentTag();
 }
 
 void WebViewImpl::pressureChangeWithEvent(NSEvent *event)
@@ -3831,11 +3867,13 @@ id WebViewImpl::accessibilityAttributeValue(NSString *attribute, id parameter)
     return [m_view _web_superAccessibilityAttributeValue:attribute];
 }
 
-void WebViewImpl::setPrimaryTrackingArea(NSTrackingArea *trackingArea)
+void WebViewImpl::updatePrimaryTrackingAreaOptions(NSTrackingAreaOptions options)
 {
+    auto trackingArea = adoptNS([[NSTrackingArea alloc] initWithRect:[m_view frame] options:options owner:m_mouseTrackingObserver.get() userInfo:nil]);
     [m_view removeTrackingArea:m_primaryTrackingArea.get()];
     m_primaryTrackingArea = trackingArea;
-    [m_view addTrackingArea:trackingArea];
+    [m_view addTrackingArea:trackingArea.get()];
+
 }
 
 // Any non-zero value will do, but using something recognizable might help us debug some day.
@@ -3843,7 +3881,7 @@ void WebViewImpl::setPrimaryTrackingArea(NSTrackingArea *trackingArea)
 
 NSTrackingRectTag WebViewImpl::addTrackingRect(CGRect, id owner, void* userData, bool assumeInside)
 {
-    ASSERT(m_trackingRectOwner == nil);
+    ASSERT(!m_trackingRectOwner);
     m_trackingRectOwner = owner;
     m_trackingRectUserData = userData;
     return TRACKING_RECT_TAG;
@@ -3852,7 +3890,7 @@ NSTrackingRectTag WebViewImpl::addTrackingRect(CGRect, id owner, void* userData,
 NSTrackingRectTag WebViewImpl::addTrackingRectWithTrackingNum(CGRect, id owner, void* userData, bool assumeInside, int tag)
 {
     ASSERT(tag == 0 || tag == TRACKING_RECT_TAG);
-    ASSERT(m_trackingRectOwner == nil);
+    ASSERT(!m_trackingRectOwner);
     m_trackingRectOwner = owner;
     m_trackingRectUserData = userData;
     return TRACKING_RECT_TAG;
@@ -3862,7 +3900,7 @@ void WebViewImpl::addTrackingRectsWithTrackingNums(CGRect*, id owner, void** use
 {
     ASSERT(count == 1);
     ASSERT(trackingNums[0] == 0 || trackingNums[0] == TRACKING_RECT_TAG);
-    ASSERT(m_trackingRectOwner == nil);
+    ASSERT(!m_trackingRectOwner);
     m_trackingRectOwner = owner;
     m_trackingRectUserData = userDataList[0];
     trackingNums[0] = TRACKING_RECT_TAG;
@@ -3900,34 +3938,53 @@ void WebViewImpl::removeTrackingRects(NSTrackingRectTag *tags, int count)
     }
 }
 
+id WebViewImpl::toolTipOwnerForSendingMouseEvents() const
+{
+    if (id owner = m_trackingRectOwner.getAutoreleased())
+        return owner;
+
+    for (NSTrackingArea *trackingArea in view().trackingAreas) {
+        static Class managerClass;
+        static std::once_flag onceFlag;
+        std::call_once(onceFlag, [] {
+            managerClass = NSClassFromString(@"NSToolTipManager");
+        });
+
+        id owner = trackingArea.owner;
+        if ([owner class] == managerClass)
+            return owner;
+    }
+    return nil;
+}
+
 void WebViewImpl::sendToolTipMouseExited()
 {
     // Nothing matters except window, trackingNumber, and userData.
     NSEvent *fakeEvent = [NSEvent enterExitEventWithType:NSEventTypeMouseExited
-                                                location:NSMakePoint(0, 0)
-                                           modifierFlags:0
-                                               timestamp:0
-                                            windowNumber:[m_view window].windowNumber
-                                                 context:NULL
-                                             eventNumber:0
-                                          trackingNumber:TRACKING_RECT_TAG
-                                                userData:m_trackingRectUserData];
-    [m_trackingRectOwner mouseExited:fakeEvent];
+        location:NSZeroPoint
+        modifierFlags:0
+        timestamp:0
+        windowNumber:[m_view window].windowNumber
+        context:nil
+        eventNumber:0
+        trackingNumber:TRACKING_RECT_TAG
+        userData:m_trackingRectUserData];
+    [toolTipOwnerForSendingMouseEvents() mouseExited:fakeEvent];
 }
 
 void WebViewImpl::sendToolTipMouseEntered()
 {
     // Nothing matters except window, trackingNumber, and userData.
     NSEvent *fakeEvent = [NSEvent enterExitEventWithType:NSEventTypeMouseEntered
-                                                location:NSMakePoint(0, 0)
-                                           modifierFlags:0
-                                               timestamp:0
-                                            windowNumber:[m_view window].windowNumber
-                                                 context:NULL
-                                             eventNumber:0
-                                          trackingNumber:TRACKING_RECT_TAG
-                                                userData:m_trackingRectUserData];
-    [m_trackingRectOwner mouseEntered:fakeEvent];
+        location:NSZeroPoint
+        modifierFlags:0
+        timestamp:0
+        windowNumber:[m_view window].windowNumber
+        context:nil
+        eventNumber:0
+        trackingNumber:TRACKING_RECT_TAG
+        userData:m_trackingRectUserData];
+    [toolTipOwnerForSendingMouseEvents() mouseEntered:fakeEvent];
 }
 
 NSString *WebViewImpl::stringForToolTip(NSToolTipTag tag)
@@ -4585,7 +4642,8 @@ void WebViewImpl::requestDOMPasteAccess(WebCore::DOMPasteAccessCategory pasteAcc
     auto pasteMenuItem = RetainPtr([m_domPasteMenu insertItemWithTitle:WebCore::contextMenuItemTagPaste() action:@selector(_web_grantDOMPasteAccess) keyEquivalent:emptyString() atIndex:0]);
     [pasteMenuItem setTarget:m_domPasteMenuDelegate.get()];
 
-    [NSMenu popUpContextMenu:m_domPasteMenu.get() withEvent:m_lastMouseDownEvent.get() forView:m_view.getAutoreleased()];
+    RetainPtr event = m_page->createSyntheticEventForContextMenu(NSEvent.mouseLocation);
+    [NSMenu popUpContextMenu:m_domPasteMenu.get() withEvent:event.get() forView:[m_view window].contentView];
 }
 
 void WebViewImpl::handleDOMPasteRequestForCategoryWithResult(WebCore::DOMPasteAccessCategory pasteAccessCategory, WebCore::DOMPasteAccessResponse response)

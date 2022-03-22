@@ -29,30 +29,29 @@
 #import <wtf/Ref.h>
 #import <wtf/RefCounted.h>
 
+struct WGPURenderBundleImpl {
+};
+
 namespace WebGPU {
 
-class RenderBundle : public RefCounted<RenderBundle> {
+class RenderBundle : public WGPURenderBundleImpl, public RefCounted<RenderBundle> {
     WTF_MAKE_FAST_ALLOCATED;
 public:
-    static Ref<RenderBundle> create(id <MTLIndirectCommandBuffer> indirectCommandBuffer)
+    static Ref<RenderBundle> create(id<MTLIndirectCommandBuffer> indirectCommandBuffer)
     {
         return adoptRef(*new RenderBundle(indirectCommandBuffer));
     }
 
     ~RenderBundle();
 
-    void setLabel(const char*);
+    void setLabel(String&&);
 
-    id <MTLIndirectCommandBuffer> indirectCommandBuffer() const { return m_indirectCommandBuffer; }
+    id<MTLIndirectCommandBuffer> indirectCommandBuffer() const { return m_indirectCommandBuffer; }
 
 private:
-    RenderBundle(id <MTLIndirectCommandBuffer>);
+    RenderBundle(id<MTLIndirectCommandBuffer>);
 
-    id <MTLIndirectCommandBuffer> m_indirectCommandBuffer { nil };
+    const id<MTLIndirectCommandBuffer> m_indirectCommandBuffer { nil };
 };
 
 } // namespace WebGPU
-
-struct WGPURenderBundleImpl {
-    Ref<WebGPU::RenderBundle> renderBundle;
-};

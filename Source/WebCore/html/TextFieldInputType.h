@@ -70,7 +70,7 @@ protected:
 #endif
 
     virtual bool needsContainer() const;
-    void createShadowSubtreeAndUpdateInnerTextElementEditability(bool) override;
+    void createShadowSubtree() override;
     void destroyShadowSubtree() override;
     void attributeChanged(const QualifiedName&) override;
     void disabledStateChanged() final;
@@ -78,7 +78,7 @@ protected:
     bool supportsReadOnly() const final;
     void handleFocusEvent(Node* oldFocusedNode, FocusDirection) final;
     void handleBlurEvent() final;
-    void setValue(const String&, bool valueChanged, TextFieldEventBehavior) override;
+    void setValue(const String&, bool valueChanged, TextFieldEventBehavior, TextControlSetValueSelection) override;
     void updateInnerTextValue() final;
     String sanitizeValue(const String&) const override;
     bool valueMissing(const String&) const final;

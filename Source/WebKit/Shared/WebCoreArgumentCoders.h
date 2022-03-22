@@ -87,12 +87,15 @@
 #if ENABLE(GPU_PROCESS) && ENABLE(WEBGL)
 #include "ArrayReference.h"
 #include <WebCore/GraphicsContextGL.h>
-#include <WebCore/GraphicsContextGLAttributes.h>
 #include <WebCore/GraphicsTypesGL.h>
 #endif
 
 #if ENABLE(WEBXR)
 #include <WebCore/PlatformXR.h>
+#endif
+
+#if ENABLE(CONTENT_FILTERING_IN_NETWORKING_PROCESS)
+#include <WebCore/MockContentFilterSettings.h>
 #endif
 
 #if PLATFORM(COCOA)
@@ -145,6 +148,7 @@ class FragmentedSharedBuffer;
 class SpringTimingFunction;
 class StepsTimingFunction;
 class StickyPositionViewportConstraints;
+class SystemImage;
 class TextCheckingRequestData;
 class TransformationMatrix;
 class UserStyleSheet;
@@ -216,10 +220,6 @@ struct MediaConstraints;
 
 #if ENABLE(ATTACHMENT_ELEMENT)
 struct SerializedAttachmentData;
-#endif
-
-#if ENABLE(GPU_PROCESS) && ENABLE(WEBGL)
-struct GraphicsContextGLAttributes;
 #endif
 
 namespace DOMCacheEngine {
@@ -714,11 +714,6 @@ template<> struct ArgumentCoder<WebCore::ServiceWorkerOrClientIdentifier> {
 
 #endif
 
-template<> struct ArgumentCoder<WebCore::MediaSelectionOption> {
-    static void encode(Encoder&, const WebCore::MediaSelectionOption&);
-    static std::optional<WebCore::MediaSelectionOption> decode(Decoder&);
-};
-
 template<> struct ArgumentCoder<WebCore::PromisedAttachmentInfo> {
     static void encode(Encoder&, const WebCore::PromisedAttachmentInfo&);
     static WARN_UNUSED_RETURN bool decode(Decoder&, WebCore::PromisedAttachmentInfo&);
@@ -777,6 +772,12 @@ template<> struct ArgumentCoder<WebCore::ScriptBuffer> {
     static std::optional<WebCore::ScriptBuffer> decode(Decoder&);
 };
 
+template<> struct ArgumentCoder<Ref<WebCore::SystemImage>> {
+    template<typename Encoder>
+    static void encode(Encoder&, const Ref<WebCore::SystemImage>&);
+    static std::optional<Ref<WebCore::SystemImage>> decode(Decoder&);
+};
+
 #if ENABLE(DATA_DETECTION)
 
 template<> struct ArgumentCoder<WebCore::DataDetectorElementInfo> {
@@ -801,11 +802,6 @@ template<> struct ArgumentCoder<WebCore::PaymentInstallmentConfiguration> {
 #endif
 
 #if ENABLE(GPU_PROCESS) && ENABLE(WEBGL)
-
-template<> struct ArgumentCoder<WebCore::GraphicsContextGLAttributes> {
-    static void encode(Encoder&, const WebCore::GraphicsContextGLAttributes&);
-    static std::optional<WebCore::GraphicsContextGLAttributes> decode(Decoder&);
-};
 
 template<> struct ArgumentCoder<WebCore::GraphicsContextGL::ActiveInfo> {
     template<typename Encoder>
@@ -854,6 +850,28 @@ template<> struct EnumTraits<WebCore::RenderingMode> {
         WebCore::RenderingMode::Accelerated
     >;
 };
+
+#if ENABLE(CONTENT_FILTERING_IN_NETWORKING_PROCESS)
+template<> struct EnumTraits<WebCore::MockContentFilterSettings::DecisionPoint> {
+    using values = EnumValues<
+        WebCore::MockContentFilterSettings::DecisionPoint,
+        WebCore::MockContentFilterSettings::DecisionPoint::AfterWillSendRequest,
+        WebCore::MockContentFilterSettings::DecisionPoint::AfterRedirect,
+        WebCore::MockContentFilterSettings::DecisionPoint::AfterResponse,
+        WebCore::MockContentFilterSettings::DecisionPoint::AfterAddData,
+        WebCore::MockContentFilterSettings::DecisionPoint::AfterFinishedAddingData,
+        WebCore::MockContentFilterSettings::DecisionPoint::Never
+    >;
+};
+
+template<> struct EnumTraits<WebCore::MockContentFilterSettings::Decision> {
+    using values = EnumValues<
+        WebCore::MockContentFilterSettings::Decision,
+        WebCore::MockContentFilterSettings::Decision::Allow,
+        WebCore::MockContentFilterSettings::Decision::Block
+    >;
+};
+#endif
 
 template<> struct EnumTraits<WebCore::AutoplayEvent> {
     using values = EnumValues<
@@ -907,15 +925,6 @@ template<> struct EnumTraits<WebCore::RealtimeMediaSource::Type> {
     >;
 };
 #endif
-
-template<> struct EnumTraits<WebCore::MediaSelectionOption::Type> {
-    using values = EnumValues<
-        WebCore::MediaSelectionOption::Type,
-        WebCore::MediaSelectionOption::Type::Regular,
-        WebCore::MediaSelectionOption::Type::LegibleOff,
-        WebCore::MediaSelectionOption::Type::LegibleAuto
-    >;
-};
 
 template <> struct EnumTraits<WebCore::WorkerType> {
     using values = EnumValues<
@@ -991,25 +1000,6 @@ template <> struct EnumTraits<WebCore::CDMInstance::HDCPStatus> {
 #endif
 
 #if ENABLE(GPU_PROCESS) && ENABLE(WEBGL)
-
-template <> struct EnumTraits<WebCore::GraphicsContextGLPowerPreference> {
-    using values = EnumValues <
-    WebCore::GraphicsContextGLPowerPreference,
-    WebCore::GraphicsContextGLPowerPreference::Default,
-    WebCore::GraphicsContextGLPowerPreference::LowPower,
-    WebCore::GraphicsContextGLPowerPreference::HighPerformance
-    >;
-};
-
-template <> struct EnumTraits<WebCore::GraphicsContextGLWebGLVersion> {
-    using values = EnumValues <
-    WebCore::GraphicsContextGLWebGLVersion,
-    WebCore::GraphicsContextGLWebGLVersion::WebGL1
-#if ENABLE(WEBGL2)
-    , WebCore::GraphicsContextGLWebGLVersion::WebGL2
-#endif
-    >;
-};
 
 template <> struct EnumTraits<WebCore::GraphicsContextGL::SimulatedEventForTesting> {
     using values = EnumValues<

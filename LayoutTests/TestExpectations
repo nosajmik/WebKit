@@ -67,6 +67,7 @@ fast/scrolling/mac [ Skip ]
 fast/scrolling/ipad [ Skip ]
 fast/text/mac [ Skip ]
 scrollingcoordinator [ Skip ]
+media/media-vp8-hiddenframes.html [ Skip ] # Requires MediaFormatReader and VP8 decoder
 media/ios [ Skip ]
 media/modern-media-controls/overflow-support [ Skip ]
 http/tests/media/modern-media-controls/overflow-support [ Skip ]
@@ -92,6 +93,7 @@ compositing/shared-backing/overflow-scroll [ Skip ]
 compositing/scrolling/async-overflow-scrolling [ Skip ]
 compositing/layer-creation/clipping-scope [ Skip ]
 fast/repaint/background-attachment-local-scroll.html [ Skip ]
+fast/repaint/background-attachment-fixed-in-composited-scroll.html [ Skip ]
 
 # WebKit2 only.
 printing/printing-events.html [ Skip ]
@@ -276,6 +278,7 @@ media/deactivate-audio-session.html [ Skip ]
 # ApplePay is only available on iOS (greater than iOS 10) and macOS (greater than macOS 10.12) and only for WebKit2.
 fast/css/appearance-apple-pay-button.html [ Skip ]
 fast/css/appearance-apple-pay-button-border-radius.html [ Skip ]
+fast/css/appearance-apple-pay-button-border-radius-longhands.html [ Skip ]
 fast/css/appearance-apple-pay-button-default-corners.html [ Skip ]
 fast/css/getComputedStyle/computed-style-apple-pay-button.html [ Skip ]
 fast/css/webkit-named-image/apple-pay-logo-black [ Skip ]
@@ -342,6 +345,9 @@ imported/w3c/web-platform-tests/referrer-policy/generic/subresource-test/script-
 imported/w3c/web-platform-tests/referrer-policy/generic/subresource-test/worker-messaging.html [ Skip ]
 imported/w3c/web-platform-tests/referrer-policy/generic/subresource-test/xhr-messaging.html [ Skip ]
 imported/w3c/web-platform-tests/referrer-policy/generic/unsupported-csp-referrer-directive.html [ Skip ]
+
+# This test is timing out in both WebKit and Blink (one of the subtests is timing out in Gecko).
+imported/w3c/web-platform-tests/html/browsers/browsing-the-web/overlapping-navigations-and-traversals/tentative/cross-document-traversal-same-document-nav.html [ Skip ]
 
 # This test times out. We should fix that.
 imported/w3c/web-platform-tests/selection/collapse-30.html [ Skip ]
@@ -422,6 +428,7 @@ imported/w3c/web-platform-tests/server-timing/navigation_timing_idl.html [ Skip 
 imported/w3c/web-platform-tests/server-timing/navigation_timing_idl.https.html [ Skip ]
 
 # Console log lines may appear in a different order so we silence them.
+http/tests/security/cookie-module-import-propagate.html [ DumpJSConsoleLogInStdErr ]
 http/tests/security/window-opened-from-sandboxed-iframe-should-inherit-sandbox.html [ DumpJSConsoleLogInStdErr ]
 http/wpt/html/cross-origin-embedder-policy/require-corp.https.html [ DumpJSConsoleLogInStdErr ]
 imported/w3c/web-platform-tests/eventsource/format-mime-bogus.any.html [ DumpJSConsoleLogInStdErr ]
@@ -845,7 +852,6 @@ imported/w3c/web-platform-tests/user-timing/clearMarks.html [ Failure Pass ]
 imported/w3c/web-platform-tests/user-timing/mark.html [ Failure Pass ]
 imported/w3c/web-platform-tests/user-timing/measure_associated_with_navigation_timing.html [ Failure Pass ]
 imported/w3c/web-platform-tests/html/webappapis/system-state-and-capabilities/the-navigator-object/plugins-and-mimetypes.html [ Failure Pass ]
-imported/w3c/web-platform-tests/beacon/beacon-redirect.sub.window.html [ Failure Pass ]
 imported/w3c/web-platform-tests/html/cross-origin-embedder-policy/anonymous-iframe/sharedworker-partitioning.tentative.https.window.html [ Failure Pass ]
 imported/w3c/web-platform-tests/service-workers/service-worker/navigation-timing-extended.https.html [ Failure Pass ]
 imported/w3c/web-platform-tests/service-workers/service-worker/resource-timing-fetch-variants.https.html [ Failure Pass ]
@@ -1027,13 +1033,26 @@ imported/w3c/web-platform-tests/fetch/content-encoding/bad-gzip-body.any.html [ 
 
 # Fetch features that are not implemented.
 imported/w3c/web-platform-tests/fetch/corb [ Skip ]
-imported/w3c/web-platform-tests/fetch/metadata/ [ Skip ]
 imported/w3c/web-platform-tests/fetch/sec-metadata [ Skip ]
 
 # These fetch tests time out
 imported/w3c/web-platform-tests/fetch/api/request/destination/fetch-destination.https.html [ Skip ]
 imported/w3c/web-platform-tests/fetch/api/request/destination/fetch-destination-prefetch.https.html [ Skip ]
 imported/w3c/web-platform-tests/fetch/content-type/response.window.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/history.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/object.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/prefetch.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/preload.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/report.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/embed.https.sub.tentative.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/form.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/iframe.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/iframe.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/navigation.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/style.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/redirect/redirect-http-upgrade.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/window-open.https.sub.html [ Skip ]
+imported/w3c/web-platform-tests/fetch/metadata/redirect/ [ Skip ]
 
 # Not supported
 imported/w3c/web-platform-tests/background-fetch [ Skip ]
@@ -1396,12 +1415,8 @@ imported/w3c/web-platform-tests/css/css-grid/masonry/tentative/masonry-order-001
 imported/w3c/web-platform-tests/css/css-grid/masonry/tentative/masonry-subgrid-001.html [ ImageOnlyFailure ]
 imported/w3c/web-platform-tests/css/css-grid/masonry/tentative/masonry-subgrid-002.html [ ImageOnlyFailure ]
 
-webkit.org/b/236951 imported/w3c/web-platform-tests/css/css-grid/subgrid/auto-track-sizing-001.html [ ImageOnlyFailure ]
 webkit.org/b/236959 imported/w3c/web-platform-tests/css/css-grid/subgrid/baseline-001.html [ ImageOnlyFailure ]
 webkit.org/b/236956 imported/w3c/web-platform-tests/css/css-grid/subgrid/grid-gap-003.html [ ImageOnlyFailure ]
-webkit.org/b/236957 imported/w3c/web-platform-tests/css/css-grid/subgrid/line-names-007.html [ ImageOnlyFailure ]
-webkit.org/b/236953 imported/w3c/web-platform-tests/css/css-grid/subgrid/orthogonal-writing-mode-002.html [ ImageOnlyFailure ]
-webkit.org/b/236953 imported/w3c/web-platform-tests/css/css-grid/subgrid/orthogonal-writing-mode-004.html [ ImageOnlyFailure ]
 webkit.org/b/236958 imported/w3c/web-platform-tests/css/css-grid/subgrid/repeat-auto-fill-003.html [ ImageOnlyFailure ]
 webkit.org/b/236949 imported/w3c/web-platform-tests/css/css-grid/subgrid/subgrid-mbp-overflow-001.html [ ImageOnlyFailure ]
 webkit.org/b/236949 imported/w3c/web-platform-tests/css/css-grid/subgrid/subgrid-mbp-overflow-002.html [ ImageOnlyFailure ]
@@ -2125,8 +2140,7 @@ webkit.org/b/148650 fast/repaint/add-table-overpaint.html [ Pass Failure ]
 
 imported/w3c/web-platform-tests/css/css-cascade/important-prop.html [ ImageOnlyFailure ]
 webkit.org/b/187093 [ Debug ] imported/w3c/web-platform-tests/css/css-cascade/all-prop-initial-xml.html [ Skip ]
-webkit.org/b/233937 imported/w3c/web-platform-tests/css/css-cascade/revert-layer-010.html [ ImageOnlyFailure ]
-webkit.org/b/233937 imported/w3c/web-platform-tests/css/css-cascade/revert-layer-011.html [ ImageOnlyFailure ]
+webkit.org/b/192334 imported/w3c/web-platform-tests/css/css-cascade/revert-layer-011.html [ ImageOnlyFailure ]
 
 # Initial failures on the import of css-content
 
@@ -4412,11 +4426,7 @@ webkit.org/b/214461 imported/w3c/web-platform-tests/css/css-pseudo/first-letter-
 webkit.org/b/214461 imported/w3c/web-platform-tests/css/css-pseudo/first-letter-exclude-inline-child-marker.html [ ImageOnlyFailure ]
 webkit.org/b/214461 imported/w3c/web-platform-tests/css/css-pseudo/first-letter-exclude-inline-marker.html [ ImageOnlyFailure ]
 webkit.org/b/214461 imported/w3c/web-platform-tests/css/css-pseudo/first-letter-list-item-dynamic-001.html [ ImageOnlyFailure ]
-webkit.org/b/214461 imported/w3c/web-platform-tests/css/css-pseudo/first-line-change-inline-color.html [ ImageOnlyFailure ]
-webkit.org/b/214461 imported/w3c/web-platform-tests/css/css-pseudo/first-line-change-inline-color-nested.html [ ImageOnlyFailure ]
 webkit.org/b/214461 imported/w3c/web-platform-tests/css/css-pseudo/first-line-opacity-001.html [ ImageOnlyFailure ]
-webkit.org/b/214461 imported/w3c/web-platform-tests/css/css-pseudo/first-line-with-before-after.html [ ImageOnlyFailure ]
-webkit.org/b/214461 imported/w3c/web-platform-tests/css/css-pseudo/first-line-with-out-of-flow.html [ ImageOnlyFailure ]
 webkit.org/b/214461 imported/w3c/web-platform-tests/css/css-pseudo/grammar-error-001.html [ ImageOnlyFailure ]
 webkit.org/b/204163 imported/w3c/web-platform-tests/css/css-pseudo/marker-content-002.html [ ImageOnlyFailure ]
 webkit.org/b/204163 imported/w3c/web-platform-tests/css/css-pseudo/marker-content-003.html [ ImageOnlyFailure ]
@@ -4443,7 +4453,6 @@ webkit.org/b/214461 imported/w3c/web-platform-tests/css/css-pseudo/marker-list-s
 webkit.org/b/214461 imported/w3c/web-platform-tests/css/css-pseudo/marker-unicode-bidi-default.html [ ImageOnlyFailure ]
 webkit.org/b/214461 imported/w3c/web-platform-tests/css/css-pseudo/marker-unicode-bidi-normal.html [ ImageOnlyFailure ]
 webkit.org/b/214461 imported/w3c/web-platform-tests/css/css-pseudo/spelling-error-001.html [ ImageOnlyFailure ]
-webkit.org/b/230964 imported/w3c/web-platform-tests/css/css-pseudo/first-line-and-placeholder.html [ ImageOnlyFailure ]
 
 webkit.org/b/214462 imported/w3c/web-platform-tests/css/css-scoping/host-context-specificity-001.html [ ImageOnlyFailure ]
 webkit.org/b/214462 imported/w3c/web-platform-tests/css/css-scoping/host-context-specificity-002.html [ ImageOnlyFailure ]
@@ -4673,7 +4682,9 @@ imported/w3c/web-platform-tests/css/css-contain/contain-html-overflow-003.html [
 imported/w3c/web-platform-tests/css/css-contain/contain-html-overflow-004.html [ ImageOnlyFailure ]
 
 # Container queries
-webkit.org/b/229659 imported/w3c/web-platform-tests/css/css-contain/container-queries/pseudo-elements-002.tentative.html [ ImageOnlyFailure ]
+webkit.org/b/229659 imported/w3c/web-platform-tests/css/css-contain/container-queries/custom-layout-container-001.https.html [ ImageOnlyFailure ]
+webkit.org/b/229659 imported/w3c/web-platform-tests/css/css-contain/container-queries/pseudo-elements-002.html [ ImageOnlyFailure ]
+webkit.org/b/229659 imported/w3c/web-platform-tests/css/css-contain/container-queries/svg-foreignobject-no-size-container.html [ Skip ]
 
 # Flaky css-contain test
 imported/w3c/web-platform-tests/css/css-contain/content-visibility/animation-display-lock.html [ Failure Pass ]
@@ -4771,6 +4782,7 @@ imported/w3c/web-platform-tests/webstorage/document-domain.html [ Skip ]
 
 webkit.org/b/221973 media/media-webm-no-duration.html [ Skip ]
 webkit.org/b/222493 media/media-source/media-source-webm-vp8-malformed-header.html [ Skip ]
+media/media-source/media-source-vp8-hiddenframes.html [ Skip ] # Requires VP8 decoder
 
 # WebXR - Missing modules.
 imported/w3c/web-platform-tests/webxr/anchors [ Skip ]
@@ -4910,10 +4922,7 @@ webkit.org/b/230004 imported/w3c/web-platform-tests/css/css-pseudo/first-letter-
 webkit.org/b/230004 imported/w3c/web-platform-tests/css/css-pseudo/first-letter-punctuation-dynamic.html [ ImageOnlyFailure ]
 webkit.org/b/230004 imported/w3c/web-platform-tests/css/css-pseudo/first-letter-skip-empty-span-nested.html [ ImageOnlyFailure ]
 webkit.org/b/230004 imported/w3c/web-platform-tests/css/css-pseudo/first-letter-skip-empty-span.html [ ImageOnlyFailure ]
-webkit.org/b/230004 imported/w3c/web-platform-tests/css/css-pseudo/first-line-with-inline-block-before.html [ ImageOnlyFailure ]
 webkit.org/b/230004 imported/w3c/web-platform-tests/css/css-pseudo/first-line-with-inline-block.html [ ImageOnlyFailure ]
-webkit.org/b/230004 imported/w3c/web-platform-tests/css/css-pseudo/first-line-with-out-of-flow-and-nested-div.html [ ImageOnlyFailure ]
-webkit.org/b/230004 imported/w3c/web-platform-tests/css/css-pseudo/first-line-with-out-of-flow-and-nested-span.html [ ImageOnlyFailure ]
 webkit.org/b/230004 imported/w3c/web-platform-tests/css/css-pseudo/grammar-spelling-errors-001.html [ ImageOnlyFailure ]
 webkit.org/b/230004 imported/w3c/web-platform-tests/css/css-pseudo/grammar-spelling-errors-002.html [ ImageOnlyFailure ]
 webkit.org/b/230004 imported/w3c/web-platform-tests/css/css-pseudo/highlight-painting-001.html [ ImageOnlyFailure ]
@@ -5072,7 +5081,6 @@ webkit.org/b/183994 imported/w3c/web-platform-tests/css/cssom/css-style-attr-dec
 
 # Test is crashing in Debug builds since import.
 webkit.org/b/234977 [ Debug ] imported/w3c/web-platform-tests/dom/events/focus-event-document-move.html [ Skip ]
-webkit.org/b/236442 [ Debug ] imported/w3c/web-platform-tests/url/toascii.window.html [ Skip ]
 
 # Test is crashing since import.
 imported/w3c/web-platform-tests/workers/modules/dedicated-worker-import-csp.html [ Skip ]

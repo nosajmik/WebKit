@@ -372,16 +372,10 @@ public:
     bool supportsExtension(const String&) final;
     void ensureExtensionEnabled(const String&) final;
     bool isExtensionEnabled(const String&) final;
-    GLint getGraphicsResetStatusARB() final;
     void drawBuffersEXT(GCGLSpan<const GCGLenum>) override;
     String getTranslatedShaderSourceANGLE(PlatformGLObject) final;
 
     // Helper methods.
-    void forceContextLost();
-    void recycleContext();
-
-    void dispatchContextChangedNotification();
-
     void paintRenderingResultsToCanvas(ImageBuffer&) final;
     std::optional<PixelBuffer> paintRenderingResultsToPixelBuffer() final;
     void paintCompositedResultsToCanvas(ImageBuffer&) final;

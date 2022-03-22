@@ -42,15 +42,15 @@
 
 namespace WebKit {
 
-RemoteVideoFrameProxy::Properties RemoteVideoFrameProxy::properties(WebKit::RemoteVideoFrameReference&& reference, const WebCore::MediaSample& mediaSample)
+RemoteVideoFrameProxy::Properties RemoteVideoFrameProxy::properties(WebKit::RemoteVideoFrameReference&& reference, const WebCore::VideoFrame& videoFrame)
 {
     return {
         WTFMove(reference),
-        mediaSample.presentationTime(),
-        mediaSample.videoMirrored(),
-        mediaSample.videoRotation(),
-        expandedIntSize(mediaSample.presentationSize()),
-        mediaSample.videoPixelFormat()
+        videoFrame.presentationTime(),
+        videoFrame.isMirrored(),
+        videoFrame.rotation(),
+        expandedIntSize(videoFrame.presentationSize()),
+        videoFrame.pixelFormat()
     };
 }
 
@@ -94,7 +94,7 @@ RemoteVideoFrameReadReference RemoteVideoFrameProxy::newReadReference() const
     return m_referenceTracker.read();
 }
 
-uint32_t RemoteVideoFrameProxy::videoPixelFormat() const
+uint32_t RemoteVideoFrameProxy::pixelFormat() const
 {
     return m_pixelFormat;
 }
@@ -107,10 +107,10 @@ CVPixelBufferRef RemoteVideoFrameProxy::pixelBuffer() const
         auto videoFrameObjectHeapProxy = std::exchange(m_videoFrameObjectHeapProxy, nullptr);
 
         bool canSendSync = isMainRunLoop(); // FIXME: we should be able to sendSync from other threads too.
-        // Currently we just key with this, as there is no condition for "has access to IOKit".
-        if (WebProcess::singleton().shouldUseRemoteRenderingForWebGL() || !canSendSync) {
+        bool canUseIOSurface = WebProcess::singleton().shouldUseRemoteRenderingForWebGL();
+        if (!canUseIOSurface || !canSendSync) {
             BinarySemaphore semaphore;
-            videoFrameObjectHeapProxy->getVideoFrameBuffer(*this, [this, &semaphore](auto pixelBuffer) {
+            videoFrameObjectHeapProxy->getVideoFrameBuffer(*this, canUseIOSurface, [this, &semaphore](auto pixelBuffer) {
                 m_pixelBuffer = WTFMove(pixelBuffer);
                 semaphore.signal();
             });
@@ -127,15 +127,6 @@ CVPixelBufferRef RemoteVideoFrameProxy::pixelBuffer() const
         m_pixelBuffer = WebCore::createBlackPixelBuffer(static_cast<size_t>(m_size.width()), static_cast<size_t>(m_size.height()));
     return m_pixelBuffer.get();
 }
-
-RefPtr<WebCore::VideoFrameCV> RemoteVideoFrameProxy::asVideoFrameCV()
-{
-    auto buffer = pixelBuffer();
-    if (!buffer)
-        return nullptr;
-    return VideoFrameCV::create(m_presentationTime, m_isMirrored, m_rotation, RetainPtr { buffer });
-}
-
 #endif
 
 TextStream& operator<<(TextStream& ts, const RemoteVideoFrameProxy::Properties& properties)

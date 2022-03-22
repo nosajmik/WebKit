@@ -26,25 +26,26 @@
 #import "config.h"
 #import "Texture.h"
 
+#import "APIConversions.h"
 #import "Device.h"
 #import "TextureView.h"
 
 namespace WebGPU {
 
-RefPtr<Texture> Device::createTexture(const WGPUTextureDescriptor* descriptor)
+RefPtr<Texture> Device::createTexture(const WGPUTextureDescriptor& descriptor)
 {
     UNUSED_PARAM(descriptor);
     return Texture::create(nil);
 }
 
-Texture::Texture(id <MTLTexture> texture)
+Texture::Texture(id<MTLTexture> texture)
     : m_texture(texture)
 {
 }
 
 Texture::~Texture() = default;
 
-RefPtr<TextureView> Texture::createView(const WGPUTextureViewDescriptor* descriptor)
+RefPtr<TextureView> Texture::createView(const WGPUTextureViewDescriptor& descriptor)
 {
     UNUSED_PARAM(descriptor);
     return TextureView::create(nil);
@@ -54,30 +55,31 @@ void Texture::destroy()
 {
 }
 
-void Texture::setLabel(const char* label)
+void Texture::setLabel(String&& label)
 {
-    m_texture.label = [NSString stringWithCString:label encoding:NSUTF8StringEncoding];
+    m_texture.label = label;
 }
 
 } // namespace WebGPU
 
+#pragma mark WGPU Stubs
+
 void wgpuTextureRelease(WGPUTexture texture)
 {
-    delete texture;
+    WebGPU::fromAPI(texture).deref();
 }
 
 WGPUTextureView wgpuTextureCreateView(WGPUTexture texture, const WGPUTextureViewDescriptor* descriptor)
 {
-    auto result = texture->texture->createView(descriptor);
-    return result ? new WGPUTextureViewImpl { result.releaseNonNull() } : nullptr;
+    return WebGPU::releaseToAPI(WebGPU::fromAPI(texture).createView(*descriptor));
 }
 
 void wgpuTextureDestroy(WGPUTexture texture)
 {
-    texture->texture->destroy();
+    WebGPU::fromAPI(texture).destroy();
 }
 
 void wgpuTextureSetLabel(WGPUTexture texture, const char* label)
 {
-    texture->texture->setLabel(label);
+    WebGPU::fromAPI(texture).setLabel(WebGPU::fromAPI(label));
 }

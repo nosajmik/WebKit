@@ -173,6 +173,9 @@ std::unique_ptr<MediaPlayerPrivateInterface> RemoteMediaPlayerManager::createRem
     proxyConfiguration.allowedMediaVideoCodecIDs = player->allowedMediaVideoCodecIDs();
     proxyConfiguration.allowedMediaAudioCodecIDs = player->allowedMediaAudioCodecIDs();
     proxyConfiguration.allowedMediaCaptionFormatTypes = player->allowedMediaCaptionFormatTypes();
+    proxyConfiguration.playerContentBoxRect = player->playerContentBoxRect();
+
+    proxyConfiguration.prefersSandboxedParsing = player->prefersSandboxedParsing();
 
     auto identifier = MediaPlayerIdentifier::generate();
     gpuProcessConnection().connection().send(Messages::RemoteMediaPlayerManagerProxy::CreateMediaPlayer(identifier, remoteEngineIdentifier, proxyConfiguration), 0);

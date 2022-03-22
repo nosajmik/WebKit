@@ -491,11 +491,17 @@ AccessibilityObject* AccessibilityRenderObject::parentObjectIfExists() const
     if (m_renderer && isWebArea())
         return cache->get(&m_renderer->view().frameView());
 
+    if (auto* displayContentsParent = this->displayContentsParent())
+        return displayContentsParent;
+
     return cache->get(renderParentObject());
 }
     
 AccessibilityObject* AccessibilityRenderObject::parentObject() const
 {
+    if (auto* displayContentsParent = this->displayContentsParent())
+        return displayContentsParent;
+
     if (!m_renderer)
         return nullptr;
     
@@ -508,14 +514,13 @@ AccessibilityObject* AccessibilityRenderObject::parentObject() const
         if (parent)
             return parent;
     }
-    
+
     AXObjectCache* cache = axObjectCache();
     if (!cache)
         return nullptr;
-    
-    RenderObject* parentObj = renderParentObject();
-    if (parentObj)
-        return cache->getOrCreate(parentObj);
+
+    if (auto* parentObject = renderParentObject())
+        return cache->getOrCreate(parentObject);
     
     // WebArea's parent should be the scroll view containing it.
     if (isWebArea())
@@ -537,7 +542,7 @@ AXCoreObject* AccessibilityRenderObject::parentObjectUnignored() const
     }
 #endif
 
-    return AccessibilityNodeObject::parentObjectUnignored();
+    return AccessibilityObject::parentObjectUnignored();
 }
 
 bool AccessibilityRenderObject::isAttachment() const
@@ -2155,8 +2160,6 @@ int AccessibilityRenderObject::indexForVisiblePosition(const VisiblePosition& po
     TextIteratorBehaviors behaviors;
 #if USE(ATSPI)
     behaviors.add(TextIteratorBehavior::EmitsObjectReplacementCharacters);
-#elif USE(ATK)
-    behaviors.add(TextIteratorBehavior::EmitsCharactersBetweenAllVisiblePositions);
 #endif
 
     return WebCore::indexForVisiblePosition(*node, position, behaviors);
@@ -2374,7 +2377,7 @@ VisiblePosition AccessibilityRenderObject::visiblePositionForPoint(const IntPoin
     if (!renderView)
         return VisiblePosition();
 
-#if PLATFORM(COCOA)
+#if PLATFORM(MAC)
     FrameView* frameView = &renderView->frameView();
 #endif
 
@@ -2413,7 +2416,7 @@ VisiblePosition AccessibilityRenderObject::visiblePositionForPoint(const IntPoin
             break;
         Frame& frame = downcast<FrameView>(*widget).frame();
         renderView = frame.document()->renderView();
-#if PLATFORM(COCOA)
+#if PLATFORM(MAC)
         frameView = downcast<FrameView>(widget);
 #endif
     }
@@ -2666,11 +2669,6 @@ AXCoreObject* AccessibilityRenderObject::accessibilityHitTest(const IntPoint& po
 
 bool AccessibilityRenderObject::shouldNotifyActiveDescendant() const
 {
-#if USE(ATK)
-    // According to the Core AAM spec, ATK expects object:state-changed:focused notifications
-    // whenever the active descendant changes.
-    return true;
-#endif
     // We want to notify that the combo box has changed its active descendant,
     // but we do not want to change the focus, because focus should remain with the combo box.
     if (isComboBox())
@@ -3198,29 +3196,36 @@ void AccessibilityRenderObject::updateAttachmentViewParents()
 }
 #endif
 
-// Hidden children are those that are not rendered or visible, but are specifically marked as aria-hidden=false,
-// meaning that they should be exposed to the AX hierarchy.
-void AccessibilityRenderObject::addHiddenChildren()
+// Some elements don't have an associated render object, meaning they won't be picked up by a walk of the render tree.
+// For example, nodes that are `aria-hidden="false"` and `hidden`, or elements with `display: contents`.
+// This function will find and add these elements to the AX tree.
+void AccessibilityRenderObject::addNodeOnlyChildren()
 {
     Node* node = this->node();
     if (!node)
         return;
-    
-    // First do a quick run through to determine if we have any hidden nodes (most often we will not).
-    // If we do have hidden nodes, we need to determine where to insert them so they match DOM order as close as possible.
-    bool shouldInsertHiddenNodes = false;
+
+    auto nodeHasDisplayContents = [] (Node& node) {
+        return is<Element>(node) && downcast<Element>(node).hasDisplayContents();
+    };
+    // First do a quick run through to determine if we have any interesting nodes (most often we will not).
+    // If we do have any interesting nodes, we need to determine where to insert them so they match DOM order as close as possible.
+    bool hasNodeOnlyChildren = false;
     for (Node* child = node->firstChild(); child; child = child->nextSibling()) {
-        if (!child->renderer() && isNodeAriaVisible(child)) {
-            shouldInsertHiddenNodes = true;
+        if (child->renderer())
+            continue;
+
+        if (nodeHasDisplayContents(*child) || isNodeAriaVisible(child)) {
+            hasNodeOnlyChildren = true;
             break;
         }
     }
     
-    if (!shouldInsertHiddenNodes)
+    if (!hasNodeOnlyChildren)
         return;
     
     // Iterate through all of the children, including those that may have already been added, and
-    // try to insert hidden nodes in the correct place in the DOM order.
+    // try to insert the nodes in the correct place in the DOM order.
     unsigned insertionIndex = 0;
     for (Node* child = node->firstChild(); child; child = child->nextSibling()) {
         if (child->renderer()) {
@@ -3239,7 +3244,7 @@ void AccessibilityRenderObject::addHiddenChildren()
             continue;
         }
 
-        if (!isNodeAriaVisible(child))
+        if (!nodeHasDisplayContents(*child) && !isNodeAriaVisible(child))
             continue;
         
         unsigned previousSize = m_children.size();
@@ -3311,9 +3316,7 @@ void AccessibilityRenderObject::addChildren()
     for (RefPtr<AccessibilityObject> object = firstChild(); object; object = object->nextSibling())
         addChildIfNeeded(*object);
 
-    m_subtreeDirty = false;
-    
-    addHiddenChildren();
+    addNodeOnlyChildren();
     addAttachmentChildren();
     addImageMapChildren();
     addTextFieldChildren();
@@ -3322,11 +3325,11 @@ void AccessibilityRenderObject::addChildren()
 #if USE(ATSPI)
     addListItemMarker();
 #endif
-
 #if PLATFORM(COCOA)
     updateAttachmentViewParents();
 #endif
-    
+
+    m_subtreeDirty = false;
     updateRoleAfterChildrenCreation();
 }
 

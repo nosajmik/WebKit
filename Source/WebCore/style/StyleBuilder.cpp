@@ -300,6 +300,11 @@ void Builder::applyProperty(CSSPropertyID id, CSSValue& value, SelectorChecker::
     bool isRevertLayer = valueToApply->isRevertLayerValue() || customPropertyValueID == CSSValueRevertLayer;
 
     if (isRevert || isRevertLayer) {
+        // In @keyframes, 'revert-layer' rolls back the cascaded value to the author level.
+        // We can just not apply the property in order to keep the value from the base style.
+        if (isRevertLayer && m_state.m_isBuildingKeyframeStyle)
+            return;
+
         auto* rollbackCascade = isRevert ? ensureRollbackCascadeForRevert() : ensureRollbackCascadeForRevertLayer();
 
         if (rollbackCascade) {
@@ -313,6 +318,10 @@ void Builder::applyProperty(CSSPropertyID id, CSSValue& value, SelectorChecker::
                 }
             } else if (rollbackCascade->hasProperty(id)) {
                 auto& property = rollbackCascade->property(id);
+                applyRollbackCascadeProperty(property, linkMatchMask);
+                return;
+            } else if (rollbackCascade->hasDeferredProperty(id)) {
+                auto& property = rollbackCascade->deferredProperty(id);
                 applyRollbackCascadeProperty(property, linkMatchMask);
                 return;
             }
@@ -394,7 +403,7 @@ const PropertyCascade* Builder::ensureRollbackCascadeForRevertLayer()
     auto& property = *m_state.m_currentProperty;
     auto rollbackLayerPriority = property.cascadeLayerPriority;
     if (!rollbackLayerPriority)
-        return nullptr;
+        return ensureRollbackCascadeForRevert();
 
     ASSERT(property.fromStyleAttribute == FromStyleAttribute::No || property.cascadeLayerPriority == RuleSet::cascadeLayerPriorityForUnlayered);
 

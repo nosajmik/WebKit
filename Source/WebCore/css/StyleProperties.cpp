@@ -37,6 +37,7 @@
 #include "Color.h"
 #include "Document.h"
 #include "PropertySetCSSStyleDeclaration.h"
+#include "Rect.h"
 #include "StylePropertyShorthand.h"
 #include "StylePropertyShorthandFunctions.h"
 #include "StyleSheetContents.h"
@@ -217,6 +218,8 @@ String StyleProperties::getPropertyValue(CSSPropertyID propertyID) const
         return getShorthandValue(borderBlockStartShorthand());
     case CSSPropertyBorderBlockEnd:
         return getShorthandValue(borderBlockEndShorthand());
+    case CSSPropertyBorderImage:
+        return borderImagePropertyValue();
     case CSSPropertyBorderInline:
         return borderPropertyValue(borderInlineWidthShorthand(), borderInlineStyleShorthand(), borderInlineColorShorthand());
     case CSSPropertyBorderInlineColor:
@@ -275,6 +278,12 @@ String StyleProperties::getPropertyValue(CSSPropertyID propertyID) const
         return fontValue();
     case CSSPropertyFontVariant:
         return fontVariantValue();
+    case CSSPropertyTextDecoration:
+        if (auto line = getPropertyCSSValue(CSSPropertyTextDecorationLine))
+            return line->cssText();
+        return String();
+    case CSSPropertyWebkitTextDecoration:
+        return getShorthandValue(webkitTextDecorationShorthand());
     case CSSPropertyTextDecorationSkip:
         return textDecorationSkipValue();
     case CSSPropertyInset:
@@ -894,6 +903,64 @@ String StyleProperties::getAlignmentShorthandValue(const StylePropertyShorthand&
     return value;
 }
 
+String StyleProperties::borderImagePropertyValue() const
+{
+    const StylePropertyShorthand& shorthand = borderImageShorthand();
+    StringBuilder result;
+    bool lastPropertyWasImportant = false;
+    bool omittedSlice = false;
+    bool omittedWidth = false;
+    String commonWideValueText;
+    auto separator = "";
+    for (unsigned i = 0; i < shorthand.length(); ++i) {
+        // All longhands should have the same importance.
+        auto longhand = shorthand.properties()[i];
+        bool currentPropertyIsImportant = propertyIsImportant(longhand);
+        if (i && lastPropertyWasImportant != currentPropertyIsImportant)
+            return String();
+        lastPropertyWasImportant = currentPropertyIsImportant;
+
+        // All longhands should be present.
+        auto value = getPropertyCSSValue(longhand);
+        if (!value)
+            return String();
+
+        // Omit implicit initial values. However, border-image-width and border-image-outset require border-image-slice.
+        if (value->isInitialValue() && isPropertyImplicit(longhand)) {
+            if (longhand == CSSPropertyBorderImageSlice)
+                omittedSlice = true;
+            else if (longhand == CSSPropertyBorderImageWidth)
+                omittedWidth = true;
+            continue;
+        }
+        if (omittedSlice && (longhand == CSSPropertyBorderImageWidth || longhand == CSSPropertyBorderImageOutset))
+            return String();
+
+        // If a longhand is set to a css-wide keyword, the others should be the same.
+        String valueText = value->cssText();
+        if (isCSSWideValueKeyword(valueText)) {
+            if (!i)
+                commonWideValueText = valueText;
+            else if (commonWideValueText != valueText)
+                return String();
+            continue;
+        }
+        if (!commonWideValueText.isNull())
+            return String();
+
+        // Append separator and text.
+        if (longhand == CSSPropertyBorderImageWidth)
+            separator = " / ";
+        else if (longhand == CSSPropertyBorderImageOutset)
+            separator = omittedWidth ? " / / " : " / ";
+        result.append(separator, valueText);
+        separator = " ";
+    }
+    if (!commonWideValueText.isNull())
+        return commonWideValueText;
+    return result.toString();
+}
+
 String StyleProperties::borderPropertyValue(const StylePropertyShorthand& width, const StylePropertyShorthand& style, const StylePropertyShorthand& color) const
 {
     const StylePropertyShorthand properties[3] = { width, style, color };
@@ -1337,6 +1404,13 @@ String StyleProperties::asText() const
             case CSSPropertyWebkitBorderVerticalSpacing:
                 shorthandPropertyID = CSSPropertyBorderSpacing;
                 break;
+            case CSSPropertyBorderImageSource:
+            case CSSPropertyBorderImageSlice:
+            case CSSPropertyBorderImageWidth:
+            case CSSPropertyBorderImageOutset:
+            case CSSPropertyBorderImageRepeat:
+                shorthandPropertyID = CSSPropertyBorderImage;
+                break;
             case CSSPropertyFontFamily:
             case CSSPropertyLineHeight:
             case CSSPropertyFontSize:
@@ -1432,6 +1506,9 @@ String StyleProperties::asText() const
             case CSSPropertyScrollPaddingInlineStart:
             case CSSPropertyScrollPaddingInlineEnd:
                 shorthandPropertyID = CSSPropertyScrollPaddingInline;
+                break;
+            case CSSPropertyTextDecorationLine:
+                shorthandPropertyID = CSSPropertyTextDecoration;
                 break;
             case CSSPropertyTransitionProperty:
             case CSSPropertyTransitionDuration:

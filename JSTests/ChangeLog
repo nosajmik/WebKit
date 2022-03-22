@@ -1,3 +1,52 @@
+2022-03-21  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        [JSC] Change Date.parse to stop returning numbers with fractional part
+        https://bugs.webkit.org/show_bug.cgi?id=238050
+
+        Reviewed by Saam Barati.
+
+        * stress/date-parse-timeclip.js: Added.
+        (shouldBe):
+
+2022-03-21  Yusuke Suzuki  <ysuzuki@apple.com>
+
+        [JSC] ReferenceError when using extra parens in class fields
+        https://bugs.webkit.org/show_bug.cgi?id=236843
+
+        Reviewed by Saam Barati.
+
+        * stress/class-field-initializer-should-have-variable-scope.js: Added.
+        (shouldBe):
+        (test1.const.a.x.B):
+        (test1):
+        (test2.const.a.x.B):
+        (test2):
+        (test3.B.prototype.b):
+        (test3.B):
+        (test3):
+
+2022-03-08  Mark Lam  <mark.lam@apple.com>
+
+        Remove invalid ASSERT in LocaleIDBuilder::overrideLanguageScriptRegion().
+        https://bugs.webkit.org/show_bug.cgi?id=237573
+        <rdar://problem/83326232>
+
+        Reviewed by Yusuke Suzuki.
+
+        * stress/handle-empty-localeID-in-localeIDBufferForLanguageTagWithNullTerminator.js: Added.
+
+2022-03-03  Tom Tartarin  <tom@leaningtech.com>
+
+        [JSC] Update wasm branch hinting
+        https://bugs.webkit.org/show_bug.cgi?id=237411
+
+        Reviewed by Yusuke Suzuki.
+
+        Simplify the module tested with the updated format.
+
+        * wasm/branch-hints/branchHintsModule.wasm:
+        * wasm/branch-hints/branchHintsSection.js:
+
 2022-02-25  Mark Lam  <mark.lam@apple.com>
 
         operationMaterializeObjectInOSR should DeferTerminationForAWhile instead of just DeferTermination.

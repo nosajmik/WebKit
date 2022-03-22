@@ -90,10 +90,7 @@ bool DisplayList::shouldDumpForFlags(AsTextFlags flags, ItemHandle item)
         if (!(flags & AsTextFlag::IncludesPlatformOperations)) {
             const auto& stateItem = item.get<SetState>();
             // FIXME: for now, only drop the item if the only state-change flags are platform-specific.
-            if (stateItem.stateChange().m_changeFlags == GraphicsContextState::ShouldSubpixelQuantizeFontsChange)
-                return false;
-
-            if (stateItem.stateChange().m_changeFlags == GraphicsContextState::ShouldSubpixelQuantizeFontsChange)
+            if (stateItem.state().changes() == GraphicsContextState::Change::ShouldSubpixelQuantizeFonts)
                 return false;
         }
         break;
@@ -248,6 +245,8 @@ void DisplayList::append(ItemHandle item)
         return append<DrawImageBuffer>(item.get<DrawImageBuffer>());
     case ItemType::DrawNativeImage:
         return append<DrawNativeImage>(item.get<DrawNativeImage>());
+    case ItemType::DrawSystemImage:
+        return append<DrawSystemImage>(item.get<DrawSystemImage>());
     case ItemType::DrawPattern:
         return append<DrawPattern>(item.get<DrawPattern>());
     case ItemType::DrawRect:

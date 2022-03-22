@@ -80,6 +80,7 @@
 #import "Theme.h"
 #import "UTIUtilities.h"
 #import "WebCoreThreadRun.h"
+#import "WebCoreUIColorExtras.h"
 #import <CoreGraphics/CoreGraphics.h>
 #import <CoreImage/CoreImage.h>
 #import <objc/runtime.h>
@@ -702,7 +703,7 @@ LengthBox RenderThemeIOS::popupInternalPaddingBox(const RenderStyle& style, cons
     float padding = MenuListButtonPaddingAfter;
     if (settings.iOSFormControlRefreshEnabled()) {
         auto emSize = CSSPrimitiveValue::create(1.0, CSSUnitType::CSS_EMS);
-        padding = emSize->computeLength<float>(CSSToLengthConversionData(&style, nullptr, nullptr, nullptr, 1.0, std::nullopt));
+        padding = emSize->computeLength<float>({ style, nullptr, nullptr, nullptr });
     }
 
     if (style.effectiveAppearance() == MenulistButtonPart) {
@@ -752,7 +753,7 @@ static void applyCommonButtonPaddingToStyle(RenderStyle& style, const Element& e
     Document& document = element.document();
     auto emSize = CSSPrimitiveValue::create(0.5, CSSUnitType::CSS_EMS);
     // We don't need this element's parent style to calculate `em` units, so it's okay to pass nullptr for it here.
-    int pixels = emSize->computeLength<int>(CSSToLengthConversionData(&style, document.renderStyle(), nullptr, document.renderView(), document.frame() ? document.frame()->pageZoomFactor() : 1.));
+    int pixels = emSize->computeLength<int>({ style, document.renderStyle(), nullptr, document.renderView() });
     style.setPaddingBox(LengthBox(0, pixels, 0, pixels));
 }
 
@@ -1285,7 +1286,7 @@ void RenderThemeIOS::adjustButtonStyle(RenderStyle& style, const Element* elemen
     // Since the element might not be in a document, just pass nullptr for the root element style,
     // the parent element style, and the render view.
     auto emSize = CSSPrimitiveValue::create(1.0, CSSUnitType::CSS_EMS);
-    int pixels = emSize->computeLength<int>(CSSToLengthConversionData(&style, nullptr, nullptr, nullptr, 1.0, std::nullopt));
+    int pixels = emSize->computeLength<int>({ style, nullptr, nullptr, nullptr });
     style.setPaddingBox(LengthBox(0, pixels, 0, pixels));
 
     if (!element)
@@ -1444,6 +1445,7 @@ struct CSSValueSystemColorInformation {
     SEL selector;
     bool makeOpaque { false };
     float opacity { 1.0f };
+    UIColor *(*function)(void) { nullptr };
 };
 
 static const Vector<CSSValueSystemColorInformation>& cssValueSystemColorInformationList()
@@ -1456,7 +1458,7 @@ static const Vector<CSSValueSystemColorInformation>& cssValueSystemColorInformat
         [] {
         cssValueSystemColorInformationList.get() = Vector(std::initializer_list<CSSValueSystemColorInformation> {
             { CSSValueText, @selector(labelColor) },
-            { CSSValueWebkitControlBackground, @selector(systemBackgroundColor) },
+            { CSSValueWebkitControlBackground, nil, false, 1.0f, &systemBackgroundColor },
             { CSSValueAppleSystemBlue, @selector(systemBlueColor) },
             { CSSValueAppleSystemBrown, @selector(systemBrownColor) },
             { CSSValueAppleSystemGray, @selector(systemGrayColor) },
@@ -1468,7 +1470,7 @@ static const Vector<CSSValueSystemColorInformation>& cssValueSystemColorInformat
             { CSSValueAppleSystemRed, @selector(systemRedColor) },
             { CSSValueAppleSystemTeal, @selector(systemTealColor) },
             { CSSValueAppleSystemYellow, @selector(systemYellowColor) },
-            { CSSValueAppleSystemBackground, @selector(systemBackgroundColor) },
+            { CSSValueAppleSystemBackground, nil, false, 1.0f, &systemBackgroundColor },
             { CSSValueAppleSystemSecondaryBackground, @selector(secondarySystemBackgroundColor) },
             { CSSValueAppleSystemTertiaryBackground, @selector(tertiarySystemBackgroundColor) },
             { CSSValueAppleSystemOpaqueFill, @selector(systemFillColor), true },
@@ -1488,11 +1490,11 @@ static const Vector<CSSValueSystemColorInformation>& cssValueSystemColorInformat
             // FIXME: <rdar://problem/79471528> Adopt [UIColor opaqueSeparatorColor] once it has a high contrast variant.
             { CSSValueAppleSystemOpaqueSeparator, @selector(separatorColor), true },
             { CSSValueAppleSystemContainerBorder, @selector(separatorColor) },
-            { CSSValueAppleSystemControlBackground, @selector(systemBackgroundColor) },
+            { CSSValueAppleSystemControlBackground, nil, false, 1.0f, &systemBackgroundColor },
             { CSSValueAppleSystemGrid, @selector(separatorColor) },
             { CSSValueAppleSystemHeaderText, @selector(labelColor) },
             { CSSValueAppleSystemSelectedContentBackground, @selector(tableCellDefaultSelectionTintColor) },
-            { CSSValueAppleSystemTextBackground, @selector(systemBackgroundColor) },
+            { CSSValueAppleSystemTextBackground, nil, false, 1.0f, &systemBackgroundColor },
             { CSSValueAppleSystemUnemphasizedSelectedContentBackground, @selector(tableCellDefaultSelectionTintColor) },
             { CSSValueAppleWirelessPlaybackTargetActive, @selector(systemBlueColor) },
         });
@@ -1503,19 +1505,24 @@ static const Vector<CSSValueSystemColorInformation>& cssValueSystemColorInformat
 
 static inline std::optional<Color> systemColorFromCSSValueSystemColorInformation(CSSValueSystemColorInformation systemColorInformation, bool useDarkAppearance)
 {
-    if (auto color = wtfObjCMsgSend<UIColor *>(PAL::getUIColorClass(), systemColorInformation.selector)) {
-        Color systemColor(roundAndClampToSRGBALossy(color.CGColor), Color::Flags::Semantic);
+    UIColor *color = nil;
+    if (systemColorInformation.selector)
+        color = wtfObjCMsgSend<UIColor *>(PAL::getUIColorClass(), systemColorInformation.selector);
+    else
+        color = systemColorInformation.function();
 
-        if (systemColorInformation.opacity < 1.0f)
-            systemColor = systemColor.colorWithAlphaMultipliedBy(systemColorInformation.opacity);
+    if (!color)
+        return std::nullopt;
 
-        if (systemColorInformation.makeOpaque)
-            return blendSourceOver(useDarkAppearance ? Color::black : Color::white, systemColor);
+    Color systemColor(roundAndClampToSRGBALossy(color.CGColor), Color::Flags::Semantic);
 
-        return systemColor;
-    }
+    if (systemColorInformation.opacity < 1.0f)
+        systemColor = systemColor.colorWithAlphaMultipliedBy(systemColorInformation.opacity);
 
-    return std::nullopt;
+    if (systemColorInformation.makeOpaque)
+        return blendSourceOver(useDarkAppearance ? Color::black : Color::white, systemColor);
+
+    return systemColor;
 }
 
 static std::optional<Color> systemColorFromCSSValueID(CSSValueID cssValueID, bool useDarkAppearance, bool useElevatedUserInterfaceLevel)
@@ -2888,7 +2895,7 @@ void RenderThemeIOS::paintMenuListButtonDecorationsWithFormControlRefresh(const 
     }
 
     auto emSize = CSSPrimitiveValue::create(1.0, CSSUnitType::CSS_EMS);
-    auto emPixels = emSize->computeLength<float>(CSSToLengthConversionData(&style, nullptr, nullptr, nullptr, 1.0, std::nullopt));
+    auto emPixels = emSize->computeLength<float>({ style, nullptr, nullptr, nullptr });
     auto glyphScale = 0.65f * emPixels / glyphSize.width();
     glyphSize = glyphScale * glyphSize;
 
@@ -2916,7 +2923,7 @@ void RenderThemeIOS::adjustSearchFieldDecorationPartStyle(RenderStyle& style, co
     constexpr int searchFieldDecorationEmSize = 1;
     constexpr int searchFieldDecorationMargin = 4;
 
-    CSSToLengthConversionData conversionData(&style, nullptr, nullptr, nullptr, 1.0, std::nullopt);
+    CSSToLengthConversionData conversionData(style, nullptr, nullptr, nullptr);
 
     auto emSize = CSSPrimitiveValue::create(searchFieldDecorationEmSize, CSSUnitType::CSS_EMS);
     auto size = emSize->computeLength<float>(conversionData);

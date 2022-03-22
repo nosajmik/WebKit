@@ -143,8 +143,6 @@ struct WebProcessCreationParameters {
     bool hasRichContentServices { false };
 #endif
 
-    Seconds terminationTimeout;
-
     TextCheckerState textCheckerState;
 
 #if PLATFORM(COCOA)
@@ -209,7 +207,7 @@ struct WebProcessCreationParameters {
     std::optional<SandboxExtension::Handle> launchServicesExtensionHandle;
 #if HAVE(VIDEO_RESTRICTED_DECODING)
 #if PLATFORM(MAC)
-    Vector<SandboxExtension::Handle> videoDecoderExtensionHandles;
+    SandboxExtension::Handle trustdExtensionHandle;
 #endif
     bool restrictImageAndVideoDecoders { false };
 #endif
@@ -255,6 +253,7 @@ struct WebProcessCreationParameters {
 #if USE(GLIB)
     String applicationID;
     String applicationName;
+    CString inspectorServerAddress;
 #endif
 
 #if USE(ATSPI)

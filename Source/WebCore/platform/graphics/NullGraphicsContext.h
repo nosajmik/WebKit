@@ -55,13 +55,15 @@ private:
     bool invalidatingImagesWithAsyncDecodes() const final { return m_paintInvalidationReasons == PaintInvalidationReasons::InvalidatingImagesWithAsyncDecodes; }
     bool detectingContentfulPaint() const final { return m_paintInvalidationReasons == PaintInvalidationReasons::DetectingContentfulPaint; }
 
-    void didUpdateState(const GraphicsContextState&, GraphicsContextState::StateChangeFlags) final { }
+    void didUpdateState(GraphicsContextState&) final { }
 
 #if USE(CG)
     void setIsAcceleratedContext(bool) final { }
 #endif
 
     void drawNativeImage(NativeImage&, const FloatSize&, const FloatRect&, const FloatRect&, const ImagePaintingOptions&) final { }
+
+    void drawSystemImage(SystemImage&, const FloatRect&) final { };
 
     void drawPattern(NativeImage&, const FloatRect&, const FloatRect&, const AffineTransform&, const FloatPoint&, const FloatSize&, const ImagePaintingOptions&) final { }
 

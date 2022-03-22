@@ -1384,6 +1384,9 @@ TEST(WebAuthenticationPanel, LADuplicateCredentialWithConsent)
 TEST(WebAuthenticationPanel, LANoCredential)
 {
     reset();
+    // In case this wasn't cleaned up by another test.
+    cleanUpKeychain("");
+
     RetainPtr<NSURL> testURL = [[NSBundle mainBundle] URLForResource:@"web-authentication-get-assertion-la" withExtension:@"html" subdirectory:@"TestWebKitAPI.resources"];
 
     auto *configuration = [WKWebViewConfiguration _test_configurationWithTestPlugInClassName:@"WebProcessPlugInWithInternals" configureJSCForTesting:YES];
@@ -1469,33 +1472,6 @@ TEST(WebAuthenticationPanel, LAMakeCredentialNoMockNoUserGesture)
 
     [webView loadRequest:[NSURLRequest requestWithURL:testURL.get()]];
     [webView waitForMessage:@"This request has been cancelled by the user."];
-}
-
-TEST(WebAuthenticationPanel, LAMakeCredentialRollBackCredential)
-{
-    reset();
-    RetainPtr<NSURL> testURL = [[NSBundle mainBundle] URLForResource:@"web-authentication-make-credential-la-no-attestation" withExtension:@"html" subdirectory:@"TestWebKitAPI.resources"];
-
-    auto *configuration = [WKWebViewConfiguration _test_configurationWithTestPlugInClassName:@"WebProcessPlugInWithInternals" configureJSCForTesting:YES];
-    [[configuration preferences] _setEnabled:NO forExperimentalFeature:webAuthenticationModernExperimentalFeature()];
-
-    auto webView = adoptNS([[TestWKWebView alloc] initWithFrame:NSZeroRect configuration:configuration]);
-    auto delegate = adoptNS([[TestWebAuthenticationPanelUIDelegate alloc] init]);
-    [webView setUIDelegate:delegate.get()];
-    [webView focus];
-
-    localAuthenticatorPolicy = _WKLocalAuthenticatorPolicyAllow;
-    [webView loadRequest:[NSURLRequest requestWithURL:testURL.get()]];
-    [webView waitForMessage:@"Couldn't attest: The operation couldn't complete."];
-
-    NSDictionary *query = @{
-        (id)kSecClass: (id)kSecClassKey,
-        (id)kSecAttrKeyClass: (id)kSecAttrKeyClassPrivate,
-        (id)kSecAttrLabel: @"",
-        (id)kSecUseDataProtectionKeychain: @YES
-    };
-    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, nullptr);
-    EXPECT_EQ(status, errSecItemNotFound);
 }
 
 #if PLATFORM(MAC)
@@ -1891,7 +1867,7 @@ TEST(WebAuthenticationPanel, MakeCredentialLA)
     Util::run(&webAuthenticationPanelRan);
 }
 
-TEST(WebAuthenticationPanel, MakeCredentialLAClientDataHash)
+TEST(WebAuthenticationPanel, MakeCredentialLAClientDataHashMediation)
 {
     reset();
 
@@ -1912,7 +1888,7 @@ TEST(WebAuthenticationPanel, MakeCredentialLAClientDataHash)
     auto delegate = adoptNS([[TestWebAuthenticationPanelDelegate alloc] init]);
     [panel setDelegate:delegate.get()];
 
-    [panel makeCredentialWithClientDataHash:nsHash.get() options:options.get() completionHandler:^(_WKAuthenticatorAttestationResponse *response, NSError *error) {
+    [panel makeCredentialWithMediationRequirement:_WKWebAuthenticationMediationRequirementOptional clientDataHash:nsHash.get() options:options.get() completionHandler:^(_WKAuthenticatorAttestationResponse *response, NSError *error) {
         webAuthenticationPanelRan = true;
         cleanUpKeychain("example.com");
 
@@ -2112,7 +2088,7 @@ TEST(WebAuthenticationPanel, GetAssertionLA)
     Util::run(&webAuthenticationPanelRan);
 }
 
-TEST(WebAuthenticationPanel, GetAssertionLAClientDataHash)
+TEST(WebAuthenticationPanel, GetAssertionLAClientDataHashMediation)
 {
     reset();
 
@@ -2129,7 +2105,7 @@ TEST(WebAuthenticationPanel, GetAssertionLAClientDataHash)
     auto delegate = adoptNS([[TestWebAuthenticationPanelDelegate alloc] init]);
     [panel setDelegate:delegate.get()];
 
-    [panel getAssertionWithClientDataHash:nsHash options:options.get() completionHandler:^(_WKAuthenticatorAssertionResponse *response, NSError *error) {
+    [panel getAssertionWithMediationRequirement:_WKWebAuthenticationMediationRequirementOptional clientDataHash:nsHash options:options.get() completionHandler:^(_WKAuthenticatorAssertionResponse *response, NSError *error) {
         webAuthenticationPanelRan = true;
         cleanUpKeychain("example.com");
 

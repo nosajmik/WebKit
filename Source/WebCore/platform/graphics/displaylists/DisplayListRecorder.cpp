@@ -53,45 +53,34 @@ Recorder::~Recorder()
     ASSERT(m_stateStack.size() == 1); // If this fires, it indicates mismatched save/restore.
 }
 
-static bool containsOnlyInlineStateChanges(const GraphicsContextStateChange& changes, GraphicsContextState::StateChangeFlags changeFlags)
+void Recorder::appendStateChangeItem(const GraphicsContextState& state)
 {
-    static constexpr GraphicsContextState::StateChangeFlags inlineStateChangeFlags {
-        GraphicsContextState::StrokeThicknessChange,
-        GraphicsContextState::StrokeColorChange,
-        GraphicsContextState::FillColorChange,
-    };
+    ASSERT(state.changes());
+    
+    if (state.containsOnlyInlineChanges()) {
+        if (state.changes().contains(GraphicsContextState::Change::FillBrush))
+            recordSetInlineFillColor(*fillColor().tryGetAsSRGBABytes());
 
-    if (changeFlags != (changeFlags & inlineStateChangeFlags))
-        return false;
+        if (state.changes().contains(GraphicsContextState::Change::StrokeBrush))
+            recordSetInlineStrokeColor(*strokeColor().tryGetAsSRGBABytes());
 
-    if (changeFlags.contains(GraphicsContextState::StrokeColorChange) && !changes.m_state.strokeColor.tryGetAsSRGBABytes())
-        return false;
+        if (state.changes().contains(GraphicsContextState::Change::StrokeThickness))
+            recordSetStrokeThickness(strokeThickness());
 
-    if (changeFlags.contains(GraphicsContextState::FillColorChange) && !changes.m_state.fillColor.tryGetAsSRGBABytes())
-        return false;
-
-    return true;
-}
-
-void Recorder::appendStateChangeItem(const GraphicsContextStateChange& changes, GraphicsContextState::StateChangeFlags changeFlags)
-{
-    if (!containsOnlyInlineStateChanges(changes, changeFlags)) {
-        if (auto pattern = changes.m_state.strokePattern)
-            recordResourceUse(pattern->tileImage());
-        if (auto pattern = changes.m_state.fillPattern)
-            recordResourceUse(pattern->tileImage());
-        recordSetState(changes.m_state, changeFlags);
         return;
     }
 
-    if (changeFlags.contains(GraphicsContextState::StrokeColorChange))
-        recordSetInlineStrokeColor(*changes.m_state.strokeColor.tryGetAsSRGBABytes());
+    if (state.changes().contains(GraphicsContextState::Change::FillBrush)) {
+        if (auto pattern = fillPattern())
+            recordResourceUse(pattern->tileImage());
+    }
 
-    if (changeFlags.contains(GraphicsContextState::StrokeThicknessChange))
-        recordSetStrokeThickness(changes.m_state.strokeThickness);
+    if (state.changes().contains(GraphicsContextState::Change::StrokeBrush)) {
+        if (auto pattern = strokePattern())
+            recordResourceUse(pattern->tileImage());
+    }
 
-    if (changeFlags.contains(GraphicsContextState::FillColorChange))
-        recordSetInlineFillColor(*changes.m_state.fillColor.tryGetAsSRGBABytes());
+    recordSetState(state);
 }
 
 void Recorder::appendStateChangeItemIfNecessary()
@@ -99,25 +88,25 @@ void Recorder::appendStateChangeItemIfNecessary()
     // FIXME: This is currently invoked in an ad-hoc manner when recording drawing items. We should consider either
     // splitting GraphicsContext state changes into individual display list items, or refactoring the code such that
     // this method is automatically invoked when recording a drawing item.
-    auto& stateChanges = currentState().stateChange;
-    auto changesFromLastState = stateChanges.changesFromState(currentState().lastDrawingState);
-    if (!changesFromLastState)
+    auto& state = currentState().state;
+    if (!state.changes())
         return;
 
-    LOG_WITH_STREAM(DisplayLists, stream << "pre-drawing, saving state " << GraphicsContextStateChange(stateChanges.m_state, changesFromLastState));
-    appendStateChangeItem(stateChanges, changesFromLastState);
-    stateChanges.m_changeFlags = { };
-    currentState().lastDrawingState = stateChanges.m_state;
+    LOG_WITH_STREAM(DisplayLists, stream << "pre-drawing, saving state " << state);
+    appendStateChangeItem(state);
+    state.didApplyChanges();
+    currentState().lastDrawingState = state;
 }
 
 const GraphicsContextState& Recorder::state() const
 {
-    return currentState().stateChange.m_state;
+    return currentState().state;
 }
 
-void Recorder::didUpdateState(const GraphicsContextState& state, GraphicsContextState::StateChangeFlags flags)
+void Recorder::didUpdateState(GraphicsContextState& state)
 {
-    currentState().stateChange.accumulate(state, flags);
+    currentState().state.mergeChanges(state, currentState().lastDrawingState);
+    state.didApplyChanges();
 }
 
 void Recorder::setLineCap(LineCap lineCap)
@@ -196,6 +185,11 @@ void Recorder::drawNativeImage(NativeImage& image, const FloatSize& imageSize, c
     recordDrawNativeImage(image.renderingResourceIdentifier(), imageSize, destRect, srcRect, options);
 }
 
+void Recorder::drawSystemImage(SystemImage& systemImage, const FloatRect& destinationRect)
+{
+    recordDrawSystemImage(systemImage, destinationRect);
+}
+
 void Recorder::drawPattern(NativeImage& image, const FloatRect& destRect, const FloatRect& tileRect, const AffineTransform& patternTransform, const FloatPoint& phase, const FloatSize& spacing, const ImagePaintingOptions& options)
 {
     appendStateChangeItemIfNecessary();
@@ -217,12 +211,15 @@ void Recorder::drawPattern(ImageBuffer& imageBuffer, const FloatRect& destRect, 
 
 void Recorder::save()
 {
+    GraphicsContext::save();
     recordSave();
-    m_stateStack.append(m_stateStack.last().cloneForSave());
+    m_stateStack.append(m_stateStack.last());
 }
 
 void Recorder::restore()
 {
+    GraphicsContext::restore();
+
     if (!m_stateStack.size())
         return;
 
@@ -270,16 +267,24 @@ AffineTransform Recorder::getCTM(GraphicsContext::IncludeDeviceScale) const
 
 void Recorder::beginTransparencyLayer(float opacity)
 {
+    GraphicsContext::beginTransparencyLayer(opacity);
+
     appendStateChangeItemIfNecessary();
     recordBeginTransparencyLayer(opacity);
     m_stateStack.append(m_stateStack.last().cloneForTransparencyLayer());
+    
+    m_state.didBeginTransparencyLayer();
 }
 
 void Recorder::endTransparencyLayer()
 {
+    GraphicsContext::endTransparencyLayer();
+
     appendStateChangeItemIfNecessary();
     recordEndTransparencyLayer();
     m_stateStack.removeLast();
+
+    m_state.didEndTransparencyLayer(currentState().state.alpha());
 }
 
 void Recorder::drawRect(const FloatRect& rect, float borderThickness)
@@ -492,12 +497,9 @@ void Recorder::clipToImageBuffer(ImageBuffer& imageBuffer, const FloatRect& dest
     recordClipToImageBuffer(imageBuffer, destRect);
 }
 
-RefPtr<ImageBuffer> Recorder::createImageBuffer(const FloatSize& size, const DestinationColorSpace& colorSpace, RenderingMode renderingMode, RenderingMethod renderingMethod) const
+RefPtr<ImageBuffer> Recorder::createImageBuffer(const FloatSize& size, float resolutionScale, const DestinationColorSpace& colorSpace, std::optional<RenderingMode> renderingMode, std::optional<RenderingMethod> renderingMethod) const
 {
-    if (renderingMethod == RenderingMethod::Default)
-        renderingMethod = RenderingMethod::DisplayList;
-
-    return GraphicsContext::createImageBuffer(size, colorSpace, renderingMode, renderingMethod);
+    return GraphicsContext::createImageBuffer(size, resolutionScale, colorSpace, renderingMode, renderingMethod.value_or(RenderingMethod::DisplayList));
 }
 
 #if ENABLE(VIDEO)
