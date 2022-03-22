@@ -2044,6 +2044,10 @@ static JSC_DECLARE_HOST_FUNCTION(functionTimeWasmMemAccessM1);
 static JSC_DECLARE_HOST_FUNCTION(functionGetuid);
 static JSC_DECLARE_HOST_FUNCTION(functionGeteuid);
 
+// Instrumenting internal functions for interfacing with wasm/rust
+static JSC_DECLARE_HOST_FUNCTION(functionTouchVictimTypeInternal);
+static JSC_DECLARE_HOST_FUNCTION(functionTimeVictimTypeInternal);
+
 static JSC_DECLARE_HOST_FUNCTION(functionCpuCpuid);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuPause);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuClflush);
@@ -2385,6 +2389,97 @@ JSC_DEFINE_HOST_FUNCTION(functionGetuid, (JSGlobalObject*, CallFrame*))
 JSC_DEFINE_HOST_FUNCTION(functionGeteuid, (JSGlobalObject*, CallFrame*))
 {
     return JSValue::encode(jsNumber(geteuid()));
+}
+
+/*
+ Internal $vm function to be called by touchVictimType(), which is the JS
+ function that interfaces with wasm/Rust for touching the victim initially.
+ touchVictimType() will supply the Error object split across cache lines
+ as an argument, and then invoke functionTouchVictimTypeInternal.
+ 
+ Use me like this (from JS): $vm.touchVictimTypeInternal(ErrorObject)
+ Returns the JSType value of the ErrorObject (although it's not that useful).
+ */
+JSC_DEFINE_HOST_FUNCTION(functionTouchVictimTypeInternal, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    // Get JSCell pointer of ErrorObject plus offset to the JSType.
+    volatile uint8_t *target = bitwise_cast<volatile uint8_t*>(callFrame->argument(0).asCell()) + 
+                                JSCell::typeInfoTypeOffset();
+
+    // Target access
+    *(volatile char *) target;
+    asm volatile("dsb ish"); // lfence
+
+    // Return the type value
+    return JSValue::encode(jsNumber(*target));
+}
+
+/*
+ Internal $vm function to be called by timeVictimType(), which is the JS
+ function that interfaces with wasm/Rust for timing re-access to the victim
+ after eviction set traversal.
+ timeVictimType() will supply the Error object split across cache lines
+ as an argument, and then invoke functionTimeVictimTypeInternal.
+ 
+ Use me like this (from JS): const timing = $vm.timeVictimTypeInternal(ErrorObject)
+ Returns the cycle count between touching the JSType of ErrorObject.
+*/
+JSC_DEFINE_HOST_FUNCTION(functionTimeVictimTypeInternal, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    // jsc or WebKit MUST BE RUN AS ROOT for this to work.
+    if (getuid() != 0 || geteuid() != 0) {
+        return JSValue::encode(jsUndefined());
+    }
+
+    const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
+    void *kperf_lib = NULL;
+    volatile int (*kpc_get_thread_counters)(int, unsigned, volatile uint64_t *) = NULL;
+
+    // The array size is the size of the entire array divided by the size of the
+    // first element, i.e. this macro expands to the number of elements in the
+    // array.
+    #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+    // We cannot open the KPC API provided by the kernel ourselves directly.
+	// Instead we rely on the kperf framework which is entitled to access
+	// this API.
+	kperf_lib = dlopen(kperf_path, RTLD_LAZY);
+    
+    if (!kperf_lib) {
+        // return undefined to user since printing doesn't work very well here
+        return JSValue::encode(jsUndefined());
+    }
+
+    // Look up kpc_get_thread_counters.
+    // Need to do some casting here because compiler will complain about
+    // assigning void pointer to function pointer
+	*(void **)(&kpc_get_thread_counters) = dlsym(kperf_lib, "kpc_get_thread_counters");
+
+    // Storage space for performance counters on two timestamps.
+    // Read with serialization on both sides.
+	volatile uint64_t counters_before[10];
+    volatile uint64_t counters_after[10];
+
+    // Get JSCell pointer of ErrorObject plus offset to the JSType.
+    volatile uint8_t *target = bitwise_cast<volatile uint8_t*>(callFrame->argument(0).asCell()) + 
+                                JSCell::typeInfoTypeOffset();
+    
+    // Timestamp 1
+    asm volatile ("isb sy");
+    kpc_get_thread_counters(0, ARRAY_SIZE(counters_before), counters_before);
+    asm volatile ("isb sy");
+
+    // Target access
+    // asm volatile("ldrb w0, [%[input]]" :: [input] "r" (target) : "w0");
+    *(volatile char *) target;
+    asm volatile("dsb ish"); // lfence
+
+    // Timestamp 2
+    asm volatile ("isb sy");
+    kpc_get_thread_counters(0, ARRAY_SIZE(counters_after), counters_after);
+    asm volatile ("isb sy");
+
+    return JSValue::encode(jsNumber(counters_after[2] - counters_before[2]));
 }
 
 JSC_DEFINE_HOST_FUNCTION(functionCpuCpuid, (JSGlobalObject*, CallFrame*))
@@ -4073,6 +4168,10 @@ void JSDollarVM::finishCreation(VM& vm)
     addFunction(vm, "timeWasmMemAccessM1", functionTimeWasmMemAccessM1, 2);
     addFunction(vm, "getuid", functionGetuid, 0);
     addFunction(vm, "geteuid", functionGeteuid, 0);
+
+    // Instrumenting internal functions for interfacing with wasm/rust
+    addFunction(vm, "touchVictimTypeInternal", 1);
+    addFunction(vm, "timeVictimTypeInternal", 1);
 
     addFunction(vm, "llintTrue", functionLLintTrue, 0);
     addFunction(vm, "baselineJITTrue", functionBaselineJITTrue, 0);
