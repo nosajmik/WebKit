@@ -2048,6 +2048,10 @@ static JSC_DECLARE_HOST_FUNCTION(functionGeteuid);
 static JSC_DECLARE_HOST_FUNCTION(functionTouchVictimTypeInternal);
 static JSC_DECLARE_HOST_FUNCTION(functionTimeVictimTypeInternal);
 
+// Describe function port from JSC shell to dollar VM
+static JSC_DECLARE_HOST_FUNCTION(functionDescribe);
+static JSC_DECLARE_HOST_FUNCTION(functionDescribeArray);
+
 static JSC_DECLARE_HOST_FUNCTION(functionCpuCpuid);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuPause);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuClflush);
@@ -2480,6 +2484,25 @@ JSC_DEFINE_HOST_FUNCTION(functionTimeVictimTypeInternal, (JSGlobalObject* global
     asm volatile ("isb sy");
 
     return JSValue::encode(jsNumber(counters_after[2] - counters_before[2]));
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionDescribe, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    VM& vm = globalObject->vm();
+    if (callFrame->argumentCount() < 1)
+        return JSValue::encode(jsUndefined());
+    return JSValue::encode(jsString(vm, toString(callFrame->argument(0))));
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionDescribeArray, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    if (callFrame->argumentCount() < 1)
+        return JSValue::encode(jsUndefined());
+    VM& vm = globalObject->vm();
+    JSObject* object = jsDynamicCast<JSObject*>(vm, callFrame->argument(0));
+    if (!object)
+        return JSValue::encode(jsNontrivialString(vm, "<not object>"_s));
+    return JSValue::encode(jsNontrivialString(vm, toString("<Butterfly: ", RawPointer(object->butterfly()), "; public length: ", object->getArrayLength(), "; vector length: ", object->getVectorLength(), ">")));
 }
 
 JSC_DEFINE_HOST_FUNCTION(functionCpuCpuid, (JSGlobalObject*, CallFrame*))
@@ -4172,6 +4195,10 @@ void JSDollarVM::finishCreation(VM& vm)
     // Instrumenting internal functions for interfacing with wasm/rust
     addFunction(vm, "touchVictimTypeInternal", functionTouchVictimTypeInternal, 1);
     addFunction(vm, "timeVictimTypeInternal", functionTimeVictimTypeInternal, 1);
+
+    // Describe function port from JSC shell to dollar VM
+    addFunction(vm, "describe", functionDescribe, 1);
+    addFunction(vm, "describeArray", functionDescribeArray, 1);
 
     addFunction(vm, "llintTrue", functionLLintTrue, 0);
     addFunction(vm, "baselineJITTrue", functionBaselineJITTrue, 0);
