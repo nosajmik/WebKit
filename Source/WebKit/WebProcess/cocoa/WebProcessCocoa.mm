@@ -772,6 +772,9 @@ static inline void restrictImageAndVideoDecoders()
 
 void WebProcess::initializeSandbox(const AuxiliaryProcessInitializationParameters& parameters, SandboxInitializationParameters& sandboxParameters)
 {
+    // nosajmik: this needs to be disabled for JSC in WebProcess to have sudo and syscall access.
+    return;
+
 #if PLATFORM(MAC) || PLATFORM(MACCATALYST)
     // Need to override the default, because service has a different bundle ID.
     auto webKitBundle = [NSBundle bundleWithIdentifier:@"com.apple.WebKit"];
