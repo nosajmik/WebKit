@@ -887,6 +887,7 @@
 			baseConfigurationReference = 44C48DFF14A4098F00A2D9C7 /* ProductionProject.xcconfig */;
 			buildSettings = {
 				ARCHS = arm64;
+				EXCLUDED_ARCHS = x86_64;
 				GCC_WARN_ABOUT_DEPRECATED_FUNCTIONS = NO;
 			};
 			name = Production;
@@ -1000,6 +1001,7 @@
 			baseConfigurationReference = 40D4CDF10E30E07400294801 /* DebugProject.xcconfig */;
 			buildSettings = {
 				ARCHS = arm64;
+				EXCLUDED_ARCHS = x86_64;
 				GCC_WARN_ABOUT_DEPRECATED_FUNCTIONS = NO;
 			};
 			name = Debug;
@@ -1009,6 +1011,7 @@
 			baseConfigurationReference = 40D4CDF40E30E07400294801 /* ReleaseProject.xcconfig */;
 			buildSettings = {
 				ARCHS = arm64;
+				EXCLUDED_ARCHS = x86_64;
 				GCC_WARN_ABOUT_DEPRECATED_FUNCTIONS = NO;
 			};
 			name = Release;

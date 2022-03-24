@@ -1375,6 +1375,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = NO;
+				EXCLUDED_ARCHS = x86_64;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Debug;
@@ -1385,6 +1386,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = NO;
+				EXCLUDED_ARCHS = x86_64;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Release;
@@ -1513,6 +1515,7 @@
 			buildSettings = {
 				ARCHS = arm64;
 				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = NO;
+				EXCLUDED_ARCHS = x86_64;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Production;

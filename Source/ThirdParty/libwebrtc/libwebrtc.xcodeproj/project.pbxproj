@@ -19989,6 +19989,7 @@
 			baseConfigurationReference = 5D7C59C61208C68B001C873E /* Base.xcconfig */;
 			buildSettings = {
 				ARCHS = arm64;
+				EXCLUDED_ARCHS = x86_64;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Production;
@@ -20031,6 +20032,7 @@
 			baseConfigurationReference = 5D7C59C71208C68B001C873E /* DebugRelease.xcconfig */;
 			buildSettings = {
 				ARCHS = arm64;
+				EXCLUDED_ARCHS = x86_64;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 				GCC_WARN_ABOUT_DEPRECATED_FUNCTIONS = NO;
@@ -20042,6 +20044,7 @@
 			baseConfigurationReference = 5D7C59C71208C68B001C873E /* DebugRelease.xcconfig */;
 			buildSettings = {
 				ARCHS = arm64;
+				EXCLUDED_ARCHS = x86_64;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 				GCC_WARN_ABOUT_DEPRECATED_FUNCTIONS = NO;
 			};
