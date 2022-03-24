@@ -1425,6 +1425,7 @@
 			baseConfigurationReference = BCB282F40CFA7450007E533E /* DebugRelease.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = YES;
+				ARCHS = arm64;
 				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = NO;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
@@ -1435,6 +1436,7 @@
 			baseConfigurationReference = BCB282F40CFA7450007E533E /* DebugRelease.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = YES;
+				ARCHS = arm64;
 				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = NO;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
@@ -1497,6 +1499,7 @@
 			baseConfigurationReference = BCB281EE0CFA713D007E533E /* Base.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = YES;
+				ARCHS = arm64;
 				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = NO;
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};

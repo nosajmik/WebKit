@@ -840,7 +840,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 14B650C518F39F4800751968 /* Base.xcconfig */;
 			buildSettings = {
+				ARCHS = arm64;
 				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = NO;
+				EXCLUDED_ARCHS = "";
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 			};
 			name = Production;
@@ -863,7 +865,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 14B650C718F39F4800751968 /* DebugRelease.xcconfig */;
 			buildSettings = {
+				ARCHS = arm64;
 				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = NO;
+				EXCLUDED_ARCHS = "";
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 				GCC_WARN_ABOUT_DEPRECATED_FUNCTIONS = NO;
 			};
@@ -873,7 +877,9 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 14B650C718F39F4800751968 /* DebugRelease.xcconfig */;
 			buildSettings = {
+				ARCHS = arm64;
 				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = NO;
+				EXCLUDED_ARCHS = "";
 				GCC_TREAT_WARNINGS_AS_ERRORS = NO;
 				GCC_WARN_ABOUT_DEPRECATED_FUNCTIONS = NO;
 			};
