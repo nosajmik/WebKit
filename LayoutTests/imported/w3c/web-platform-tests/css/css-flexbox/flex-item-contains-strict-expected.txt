@@ -1,0 +1,28 @@
+Stretched:
+
+Column
+
+Row
+
+Column
+
+Row
+Flex-start:
+
+Column
+
+Row
+
+Column
+
+Row
+
+PASS .inline-flex 1
+PASS .inline-flex 2
+PASS .inline-flex 3
+PASS .inline-flex 4
+PASS .inline-flex 5
+PASS .inline-flex 6
+PASS .inline-flex 7
+PASS .inline-flex 8
+

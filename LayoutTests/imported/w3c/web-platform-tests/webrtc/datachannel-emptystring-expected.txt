@@ -1,0 +1,9 @@
+
+PASS Can send empty strings across a WebRTC data channel.
+Messages exchanged
+
+Sent: [empty string]
+Sent: "done"
+Received: [empty string]
+Received: "done"
+
