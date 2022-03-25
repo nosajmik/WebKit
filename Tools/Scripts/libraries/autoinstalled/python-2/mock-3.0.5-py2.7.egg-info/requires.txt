@@ -1,0 +1,16 @@
+six
+
+[:python_version < "3.3"]
+funcsigs>=1
+
+[build]
+twine
+wheel
+blurb
+
+[docs]
+sphinx
+
+[test]
+pytest
+pytest-cov
