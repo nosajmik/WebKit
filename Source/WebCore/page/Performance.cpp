@@ -87,7 +87,10 @@ DOMHighResTimeStamp Performance::timeOrigin() const
 ReducedResolutionSeconds Performance::nowInReducedResolutionSeconds() const
 {
     Seconds now = MonotonicTime::now() - m_timeOrigin;
-    return reduceTimeResolution(now);
+    // return reduceTimeResolution(now);
+    // Will need Stephan's high resolution timer for this to give actually high resolution,
+    // since M1 timer is limited to a couple dozen MHz
+    return now;
 }
 
 Seconds Performance::reduceTimeResolution(Seconds seconds)

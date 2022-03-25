@@ -704,6 +704,9 @@ static void initializeSandboxParameters(const AuxiliaryProcessInitializationPara
 
 void AuxiliaryProcess::initializeSandbox(const AuxiliaryProcessInitializationParameters& parameters, SandboxInitializationParameters& sandboxParameters)
 {
+    // nosajmik: this needs to be disabled for JSC in WebProcess to have sudo and syscall access.
+    return;
+
     TraceScope traceScope(InitializeSandboxStart, InitializeSandboxEnd);
 
 #if USE(CACHE_COMPILED_SANDBOX)
