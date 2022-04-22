@@ -129,12 +129,12 @@ bool canUseWebAssemblyFastMemory();
     v(Bool, dumpDisassembly, false, Normal, "dumps disassembly of all JIT compiled code upon compilation") \
     v(Bool, asyncDisassembly, false, Normal, nullptr) \
     v(Bool, logJIT, false, Normal, nullptr) \
-    v(Bool, dumpDFGDisassembly, false, Normal, "dumps disassembly of DFG function upon compilation") \
-    v(Bool, dumpFTLDisassembly, false, Normal, "dumps disassembly of FTL function upon compilation") \
+    v(Bool, dumpDFGDisassembly, true, Normal, "dumps disassembly of DFG function upon compilation") \
+    v(Bool, dumpFTLDisassembly, true, Normal, "dumps disassembly of FTL function upon compilation") \
     v(Bool, dumpRegExpDisassembly, false, Normal, "dumps disassembly of RegExp upon compilation") \
     v(Bool, dumpWasmDisassembly, false, Normal, "dumps disassembly of all Wasm code upon compilation") \
-    v(Bool, dumpBBQDisassembly, false, Normal, "dumps disassembly of BBQ Wasm code upon compilation") \
-    v(Bool, dumpOMGDisassembly, false, Normal, "dumps disassembly of OMG Wasm code upon compilation") \
+    v(Bool, dumpBBQDisassembly, true, Normal, "dumps disassembly of BBQ Wasm code upon compilation") \
+    v(Bool, dumpOMGDisassembly, true, Normal, "dumps disassembly of OMG Wasm code upon compilation") \
     v(Bool, logJITCodeForPerf, false, Configurable, nullptr) \
     v(OptionRange, bytecodeRangeToJITCompile, 0, Normal, "bytecode size range to allow compilation on, e.g. 1:100") \
     v(OptionRange, bytecodeRangeToDFGCompile, 0, Normal, "bytecode size range to allow DFG compilation on, e.g. 1:100") \
