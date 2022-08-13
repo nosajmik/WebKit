@@ -71,9 +71,7 @@ WTF_EXTERN_C_END
 #import <PassKitCore/PKRecurringPaymentSummaryItem.h>
 #endif
 
-#if HAVE(PASSKIT_DEFAULT_SHIPPING_METHOD)
-#import <PassKitCore/PKShippingMethods.h>
-#endif
+
 
 #if HAVE(PASSKIT_SHIPPING_METHOD_DATE_COMPONENTS_RANGE)
 #import <PassKitCore/PKDateComponentsRange.h>
@@ -262,11 +260,6 @@ typedef NSString * PKPaymentNetwork NS_EXTENSIBLE_STRING_ENUM;
 @end
 #endif
 
-#if HAVE(PASSKIT_DEFAULT_SHIPPING_METHOD)
-@interface PKShippingMethods : NSObject
-- (instancetype)initWithMethods:(NSArray<PKShippingMethod *> *)methods defaultMethod:(nullable PKShippingMethod *)defaultMethod;
-@end
-#endif
 
 #if HAVE(PASSKIT_SHIPPING_METHOD_DATE_COMPONENTS_RANGE)
 @interface PKDateComponentsRange : NSObject <NSCopying, NSSecureCoding>
@@ -314,9 +307,7 @@ typedef NS_ENUM(NSUInteger, PKShippingContactEditingMode) {
 @property (nonatomic, copy, nullable) NSString *couponCode;
 #endif
 
-#if HAVE(PASSKIT_DEFAULT_SHIPPING_METHOD)
-@property (nonatomic, copy) PKShippingMethods *availableShippingMethods;
-#endif
+
 
 #if HAVE(PASSKIT_SHIPPING_CONTACT_EDITING_MODE)
 @property (nonatomic, assign) PKShippingContactEditingMode shippingContactEditingMode;
@@ -479,9 +470,6 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy) NSArray<PKPaymentSummaryItem *> *paymentSummaryItems;
 #if HAVE(PASSKIT_UPDATE_SHIPPING_METHODS_WHEN_CHANGING_SUMMARY_ITEMS)
 @property (nonatomic, copy) NSArray<PKShippingMethod *> *shippingMethods;
-#endif
-#if HAVE(PASSKIT_DEFAULT_SHIPPING_METHOD)
-@property (nonatomic, copy) PKShippingMethods *availableShippingMethods;
 #endif
 @end
 

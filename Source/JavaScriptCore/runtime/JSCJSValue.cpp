@@ -284,6 +284,7 @@ void JSValue::dumpInContextAssumingStructure(
         out.printf("Double: %08x:%08x, %lf", u.asTwoInt32s[1], u.asTwoInt32s[0], asDouble());
 #endif
     } else if (isCell()) {
+        out.print("[RawPointer: ", RawPointer(asCell()), "] ");
         if (structure->classInfo()->isSubClassOf(JSString::info())) {
             JSString* string = asString(asCell());
             out.print("String");
@@ -291,16 +292,24 @@ void JSValue::dumpInContextAssumingStructure(
                 out.print(" (rope)");
             const StringImpl* impl = string->tryGetValueImpl();
             if (impl) {
+                out.print(" [StringImpl: ", RawPointer(impl), "]");
                 if (impl->isAtom())
                     out.print(" (atomic)");
                 if (impl->isSymbol())
                     out.print(" (symbol)");
             } else
                 out.print(" (unresolved)");
-            if (string->is8Bit())
-                out.print(",8Bit:(1)");
-            else
-                out.print(",8Bit:(0)");
+            if (string->is8Bit()) {
+                // nosajmik: print m_data8
+                if (impl) {
+                    out.print(" [m_data8: ", RawPointer(impl->characters8()), "]");
+                }
+            } else {
+                // nosajmik: print m_data16
+                if (impl) {
+                    out.print(" [m_data16: ", RawPointer(impl->characters16()), "]");
+                }
+            }
             out.print(",length:(", string->length(), ")");
             out.print(": ", impl);
         } else if (structure->classInfo()->isSubClassOf(RegExp::info()))

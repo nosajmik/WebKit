@@ -43,10 +43,4 @@
    <FileRef
       location = "group:Tools/MobileMiniBrowser/MobileMiniBrowser.xcodeproj">
    </FileRef>
-   <FileRef
-      location = "group:Tools/TestWebKitAPI/TestWebKitAPI.xcodeproj">
-   </FileRef>
-   <FileRef
-      location = "group:Tools/WebKitTestRunner/WebKitTestRunner.xcodeproj">
-   </FileRef>
 </Workspace>

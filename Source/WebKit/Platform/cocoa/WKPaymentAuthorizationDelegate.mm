@@ -35,11 +35,9 @@
 
 @implementation WKPaymentAuthorizationDelegate {
     RetainPtr<NSArray<PKPaymentSummaryItem *>> _summaryItems;
-#if HAVE(PASSKIT_DEFAULT_SHIPPING_METHOD)
-    RetainPtr<PKShippingMethods> _availableShippingMethods;
-#else
+
     RetainPtr<NSArray<PKShippingMethod *>> _shippingMethods;
-#endif
+
     RetainPtr<NSError> _sessionError;
     WebKit::DidAuthorizePaymentCompletion _didAuthorizePaymentCompletion;
     WebKit::DidRequestMerchantSessionCompletion _didRequestMerchantSessionCompletion;
@@ -61,16 +59,14 @@
     RetainPtr update = paymentMethodUpdate;
     if (update) {
         _summaryItems = adoptNS([[update paymentSummaryItems] copy]);
-#if HAVE(PASSKIT_DEFAULT_SHIPPING_METHOD)
-        _availableShippingMethods = adoptNS([[update availableShippingMethods] copy]);
-#elif HAVE(PASSKIT_UPDATE_SHIPPING_METHODS_WHEN_CHANGING_SUMMARY_ITEMS)
+
+#if HAVE(PASSKIT_UPDATE_SHIPPING_METHODS_WHEN_CHANGING_SUMMARY_ITEMS)
         _shippingMethods = adoptNS([[update shippingMethods] copy]);
 #endif
     } else {
         update = adoptNS([PAL::allocPKPaymentRequestPaymentMethodUpdateInstance() initWithPaymentSummaryItems:_summaryItems.get()]);
-#if HAVE(PASSKIT_DEFAULT_SHIPPING_METHOD)
-        [update setAvailableShippingMethods:_availableShippingMethods.get()];
-#elif HAVE(PASSKIT_UPDATE_SHIPPING_METHODS_WHEN_CHANGING_SUMMARY_ITEMS)
+
+#if HAVE(PASSKIT_UPDATE_SHIPPING_METHODS_WHEN_CHANGING_SUMMARY_ITEMS)
         [update setShippingMethods:_shippingMethods.get()];
 #endif
     }
@@ -88,18 +84,14 @@
     RetainPtr update = shippingContactUpdate;
     if (update) {
         _summaryItems = adoptNS([[update paymentSummaryItems] copy]);
-#if HAVE(PASSKIT_DEFAULT_SHIPPING_METHOD)
-        _availableShippingMethods = adoptNS([[update availableShippingMethods] copy]);
-#else
+
         _shippingMethods = adoptNS([[update shippingMethods] copy]);
-#endif
+
     } else {
         update = adoptNS([PAL::allocPKPaymentRequestShippingContactUpdateInstance() initWithPaymentSummaryItems:_summaryItems.get()]);
-#if HAVE(PASSKIT_DEFAULT_SHIPPING_METHOD)
-        [update setAvailableShippingMethods:_availableShippingMethods.get()];
-#else
+
         [update setShippingMethods:_shippingMethods.get()];
-#endif
+
     }
 
     std::exchange(_didSelectShippingContactCompletion, nil)(update.get());
@@ -110,16 +102,14 @@
     RetainPtr update = shippingMethodUpdate;
     if (update) {
         _summaryItems = adoptNS([[update paymentSummaryItems] copy]);
-#if HAVE(PASSKIT_DEFAULT_SHIPPING_METHOD)
-        _availableShippingMethods = adoptNS([[update availableShippingMethods] copy]);
-#elif HAVE(PASSKIT_UPDATE_SHIPPING_METHODS_WHEN_CHANGING_SUMMARY_ITEMS)
+
+#if HAVE(PASSKIT_UPDATE_SHIPPING_METHODS_WHEN_CHANGING_SUMMARY_ITEMS)
         _shippingMethods = adoptNS([[update shippingMethods] copy]);
 #endif
     } else {
         update = adoptNS([PAL::allocPKPaymentRequestShippingMethodUpdateInstance() initWithPaymentSummaryItems:_summaryItems.get()]);
-#if HAVE(PASSKIT_DEFAULT_SHIPPING_METHOD)
-        [update setAvailableShippingMethods:_availableShippingMethods.get()];
-#elif HAVE(PASSKIT_UPDATE_SHIPPING_METHODS_WHEN_CHANGING_SUMMARY_ITEMS)
+
+#if HAVE(PASSKIT_UPDATE_SHIPPING_METHODS_WHEN_CHANGING_SUMMARY_ITEMS)
         [update setShippingMethods:_shippingMethods.get()];
 #endif
     }
@@ -134,18 +124,14 @@
     RetainPtr update = couponCodeUpdate;
     if (update) {
         _summaryItems = adoptNS([[update paymentSummaryItems] copy]);
-#if HAVE(PASSKIT_DEFAULT_SHIPPING_METHOD)
-        _availableShippingMethods = adoptNS([[update availableShippingMethods] copy]);
-#else
+
         _shippingMethods = adoptNS([[update shippingMethods] copy]);
-#endif
+
     } else {
         update = adoptNS([PAL::allocPKPaymentRequestCouponCodeUpdateInstance() initWithPaymentSummaryItems:_summaryItems.get()]);
-#if HAVE(PASSKIT_DEFAULT_SHIPPING_METHOD)
-        [update setAvailableShippingMethods:_availableShippingMethods.get()];
-#else
+
         [update setShippingMethods:_shippingMethods.get()];
-#endif
+
     }
 
     std::exchange(_didChangeCouponCodeCompletion, nil)(update.get());
@@ -170,11 +156,9 @@
 
     _presenter = presenter;
     _request = request;
-#if HAVE(PASSKIT_DEFAULT_SHIPPING_METHOD)
-    _availableShippingMethods = request.availableShippingMethods;
-#else
+
     _shippingMethods = request.shippingMethods;
-#endif
+
     _summaryItems = request.paymentSummaryItems;
     return self;
 }

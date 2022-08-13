@@ -82,6 +82,8 @@
 #include "WasmStreamingParser.h"
 #endif
 
+#include <x86intrin.h>
+
 using namespace JSC;
 
 IGNORE_WARNINGS_BEGIN("frame-address")
@@ -2086,6 +2088,10 @@ static JSC_DECLARE_HOST_FUNCTION(functionDFGTrue);
 static JSC_DECLARE_HOST_FUNCTION(functionFTLTrue);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuMfence);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuRdtsc);
+static JSC_DECLARE_HOST_FUNCTION(functionTimeWasmMemAccessM1);
+static JSC_DECLARE_HOST_FUNCTION(functionTouchVictimTypeInternal);
+static JSC_DECLARE_HOST_FUNCTION(functionTimeVictimTypeInternal);
+static JSC_DECLARE_HOST_FUNCTION(functionDescribe);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuCpuid);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuPause);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuClflush);
@@ -2295,6 +2301,118 @@ JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
 #else
     return JSValue::encode(jsNumber(0));
 #endif
+}
+
+/*
+ Call from JavaScript as $vm.functionTimeWasmMemAccessM1(view, wasmMemAddress).
+ Returns the access time to touch an index in wasm memory. In the above, view is a 
+ DataView for a WebAssembly.Memory object.
+ */
+JSC_DEFINE_HOST_FUNCTION(functionTimeWasmMemAccessM1, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    // Prep work to access variables passed in from JS runtime
+    VM& vm = globalObject->vm();
+
+    // Storage space for performance counters on two timestamps
+    uint64_t ts1, ts2;
+    uint32_t core_id;
+
+    // WebAssembly memory is an ArrayBuffer
+    if (JSArrayBufferView* view = jsDynamicCast<JSArrayBufferView*>(vm, callFrame->argument(0))) {
+        // volatile void *vector = view->vector();
+        // For testing in the future against PAC code, this may be worth trying
+        volatile void *vector = view->vectorWithoutPACValidation();
+
+        volatile uint8_t *wasmMemoryBasePtr = static_cast<volatile uint8_t*>(vector);
+
+        // Need to convert address from a NaN-boxed JSC value to an int in C++
+        JSValue addrValue = callFrame->argument(1);
+        volatile uint32_t addr = addrValue.asUInt32();
+
+        volatile uint8_t *target = wasmMemoryBasePtr + addr;
+
+        // Timestamp 1
+        _mm_mfence();
+        ts1 = __rdtscp(&core_id);
+        _mm_lfence();
+
+        // Target access
+        *(volatile char *) target;
+
+        // Timestamp 2
+        ts2 = __rdtscp(&core_id);
+        _mm_lfence();
+
+        return JSValue::encode(jsNumber(ts2 - ts1));
+    }
+
+    return JSValue::encode(jsUndefined());
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionDescribe, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    VM& vm = globalObject->vm();
+    if (callFrame->argumentCount() < 1)
+        return JSValue::encode(jsUndefined());
+    return JSValue::encode(jsString(vm, toString(callFrame->argument(0))));
+}
+
+/*
+ Internal $vm function to be called by touchVictimType(), which is the JS
+ function that interfaces with wasm/Rust for touching the victim initially.
+ touchVictimType() will supply the Error object split across cache lines
+ as an argument, and then invoke functionTouchVictimTypeInternal.
+ 
+ Use me like this (from JS): $vm.touchVictimTypeInternal(ErrorObject)
+ Returns the JSType value of the ErrorObject (although it's not that useful).
+ */
+JSC_DEFINE_HOST_FUNCTION(functionTouchVictimTypeInternal, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    // Get JSCell pointer of ErrorObject plus offset to the JSType.
+    volatile uint8_t *target = bitwise_cast<volatile uint8_t*>(callFrame->argument(0).asCell()) + 
+                                JSCell::typeInfoTypeOffset();
+
+    // Target access
+    *(volatile char *) target;
+    _mm_lfence();
+
+    // Return the type value
+    return JSValue::encode(jsNumber(*target));
+}
+
+/*
+ Internal $vm function to be called by timeVictimType(), which is the JS
+ function that interfaces with wasm/Rust for timing re-access to the victim
+ after eviction set traversal.
+ timeVictimType() will supply the Error object split across cache lines
+ as an argument, and then invoke functionTimeVictimTypeInternal.
+ 
+ Use me like this (from JS): const timing = $vm.timeVictimTypeInternal(ErrorObject)
+ Returns the cycle count between touching the JSType of ErrorObject.
+*/
+JSC_DEFINE_HOST_FUNCTION(functionTimeVictimTypeInternal, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    // Storage space for performance counters on two timestamps
+    uint64_t ts1, ts2;
+    uint32_t core_id;
+
+    // Get JSCell pointer of ErrorObject plus offset to the JSType.
+    volatile uint8_t *target = bitwise_cast<volatile uint8_t*>(callFrame->argument(0).asCell()) + 
+                                JSCell::typeInfoTypeOffset();
+
+    // Timestamp 1
+    _mm_mfence();
+    ts1 = __rdtscp(&core_id);
+    _mm_lfence();
+
+    // Target access
+    *(volatile char *) target;
+
+    // Timestamp 2
+    ts2 = __rdtscp(&core_id);
+    _mm_lfence();
+
+    return JSValue::encode(jsNumber(ts2 - ts1));
 }
 
 JSC_DEFINE_HOST_FUNCTION(functionCpuCpuid, (JSGlobalObject*, CallFrame*))
@@ -3944,6 +4062,13 @@ void JSDollarVM::finishCreation(VM& vm)
     putDirectNativeFunction(vm, globalObject, Identifier::fromString(vm, "cpuCpuid"), 0, functionCpuCpuid, CPUCpuidIntrinsic, jsDollarVMPropertyAttributes);
     putDirectNativeFunction(vm, globalObject, Identifier::fromString(vm, "cpuPause"), 0, functionCpuPause, CPUPauseIntrinsic, jsDollarVMPropertyAttributes);
     addFunction(vm, "cpuClflush", functionCpuClflush, 2);
+
+    addFunction(vm, "describe", functionDescribe, 1);
+
+    addFunction(vm, "timeWasmMemAccessIntel", functionTimeWasmMemAccessM1, 2);
+
+    addFunction(vm, "touchVictimTypeInternal", functionTouchVictimTypeInternal, 1);
+    addFunction(vm, "timeVictimTypeInternal", functionTimeVictimTypeInternal, 1);
 
     addFunction(vm, "llintTrue", functionLLintTrue, 0);
     addFunction(vm, "baselineJITTrue", functionBaselineJITTrue, 0);
