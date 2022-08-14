@@ -2095,6 +2095,7 @@ static JSC_DECLARE_HOST_FUNCTION(functionDescribe);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuCpuid);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuPause);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuClflush);
+static JSC_DECLARE_HOST_FUNCTION(functionTypeflush);
 static JSC_DECLARE_HOST_FUNCTION(functionLLintTrue);
 static JSC_DECLARE_HOST_FUNCTION(functionBaselineJITTrue);
 static JSC_DECLARE_HOST_FUNCTION(functionNoInline);
@@ -2527,6 +2528,42 @@ static FunctionExecutable* getExecutableForFunction(JSValue theFunctionValue)
         theFunction->executable());
 
     return executable;
+}
+
+/*
+ nosajmik: host function definition for cpuClflush() port from Dollar VM
+ for flushing the structureID ONLY, for type confusion
+ */
+JSC_DEFINE_HOST_FUNCTION(functionTypeflush, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    VM& vm = globalObject->vm();
+
+    auto clflush = [] (void* ptr) {
+        char* ptrToFlush = static_cast<char*>(ptr);
+        asm volatile ("clflush %0" :: "m"(*ptrToFlush) : "memory");
+    };
+
+    Vector<void*> toFlush;
+
+    // nosajmik: callFrame->argument() calls CallFrame::getArgumentUnsafe(),
+    // which returns JSValue (not pointer to JSValue)! JSValue can directly check
+    // if it is a JSCell itself without needing jsDynamicCast (this will throw an error).
+    if (callFrame->argument(0).isCell()) {
+        toFlush.append(bitwise_cast<char*>(callFrame->argument(0).asCell()) + callFrame->argument(0).asCell()->typeInfoTypeOffset());
+    } else if (JSObject* object = jsDynamicCast<JSObject*>(vm, callFrame->argument(0))) {
+        // This is only here to make the compiler shut up about unused vars/params.
+        asm volatile ("nop");
+    }
+
+    if (!toFlush.size())
+        return JSValue::encode(jsUndefined());
+
+    for (void* ptr : toFlush) {
+        clflush(ptr);
+        return JSValue::encode(jsNumber((long)ptr));
+    }
+    
+    return JSValue::encode(jsUndefined());
 }
 
 // Returns true if the current frame is a LLInt frame.
@@ -4062,6 +4099,8 @@ void JSDollarVM::finishCreation(VM& vm)
     putDirectNativeFunction(vm, globalObject, Identifier::fromString(vm, "cpuCpuid"), 0, functionCpuCpuid, CPUCpuidIntrinsic, jsDollarVMPropertyAttributes);
     putDirectNativeFunction(vm, globalObject, Identifier::fromString(vm, "cpuPause"), 0, functionCpuPause, CPUPauseIntrinsic, jsDollarVMPropertyAttributes);
     addFunction(vm, "cpuClflush", functionCpuClflush, 2);
+
+    addFunction(vm, "typeflush", functionTypeflush, 1);
 
     addFunction(vm, "describe", functionDescribe, 1);
 
