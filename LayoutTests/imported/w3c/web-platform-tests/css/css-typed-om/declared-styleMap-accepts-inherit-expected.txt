@@ -1,0 +1,3 @@
+
+FAIL Declared styleMap objects accept 'inherit' as a value set() is not yet supported
+

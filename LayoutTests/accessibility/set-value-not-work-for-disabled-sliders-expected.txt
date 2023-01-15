@@ -1,0 +1,25 @@
+This tests that disabled sliders can't be incremented or decremented.
+
+PASS: slider.intValue === 50
+PASS: slider.intValue === 50
+PASS: slider.intValue === 50
+PASS: slider.intValue === 50
+PASS: slider.intValue === 50
+PASS: slider.intValue === 50
+PASS: slider.intValue === 50
+PASS: slider.intValue === 50
+PASS: slider.intValue === 50
+PASS: slider.intValue === 50
+PASS: slider.intValue === 55
+PASS: slider.intValue === 45
+PASS: slider.intValue === 50
+PASS: slider.intValue === 55
+PASS: slider.intValue === 45
+PASS: slider.intValue === 50
+PASS: slider.intValue === 55
+PASS: slider.intValue === 45
+
+PASS successfullyParsed is true
+
+TEST COMPLETE
+

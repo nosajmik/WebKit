@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+
+<html dir="rtl">
+<head>
+    <style>
+        .wide {
+            width: 2000px;
+            height: 10px;
+            background-color: silver;
+        }
+        .origin {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 10px;
+            height: 10px;
+            background-color: blue;
+        }
+    </style>
+    <script>
+        if (window.testRunner) {
+            testRunner.dumpAsText();
+            testRunner.waitUntilDone();
+        }
+
+        if (window.internals)
+            internals.settings.setScrollAnimatorEnabled(false);
+
+        function checkForScroll()
+        {
+            var scrollLeft = document.scrollingElement.scrollLeft;
+            document.getElementById('result').textContent = "scrollLeft is " + scrollLeft;
+
+            if (window.testRunner)
+                testRunner.notifyDone();
+        }
+
+        function doTest()
+        {
+            if (window.eventSender) {
+                eventSender.monitorWheelEvents();
+                eventSender.keyDown("leftArrow");
+                eventSender.keyDown("leftArrow");
+                eventSender.keyDown("leftArrow");
+                setTimeout(function() {
+                    eventSender.callAfterScrollingCompletes(checkForScroll);
+                }, 0);
+            }
+        }
+        
+        window.addEventListener('load', doTest, false);
+    </script>
+</head>
+<body>
+    <div class="wide"></div>
+    <div class="origin"></div>
+    <div id="result"></div>
+</body>
+</html>
