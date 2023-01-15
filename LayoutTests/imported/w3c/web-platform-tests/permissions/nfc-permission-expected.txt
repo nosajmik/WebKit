@@ -1,0 +1,3 @@
+
+PASS Test Web NFC Permission.
+

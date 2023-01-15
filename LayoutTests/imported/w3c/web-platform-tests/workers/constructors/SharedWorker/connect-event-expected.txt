@@ -1,0 +1,3 @@
+
+FAIL Test connect event for a shared worker null is not an object (evaluating 'worker.port')
+
