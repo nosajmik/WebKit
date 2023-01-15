@@ -34,11 +34,11 @@ AcceleratedFiltersEnabled:
   condition: USE(CORE_IMAGE)
   defaultValue:
     WebKitLegacy:
-      default: false
+      default: true
     WebKit:
-      default: false
+      default: true
     WebCore:
-      default: false
+      default: true
 
 # FIXME: This is not relevent for WebKitLegacy, so should be excluded from WebKitLegacy entirely.
 AllowViewportShrinkToFitContent:
@@ -528,11 +528,11 @@ LayerBasedSVGEngineEnabled:
   webcoreOnChange: layerBasedSVGEngineEnabledChanged
   defaultValue:
     WebCore:
-      default: false
+      default: true
     WebKitLegacy:
-      default: false
+      default: true
     WebKit:
-      default: false
+      default: true
 
 LayoutFormattingContextEnabled:
   type: bool

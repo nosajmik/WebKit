@@ -26,11 +26,11 @@ AcceleratedDrawingEnabled:
   defaultValue:
     WebKitLegacy:
       "PLATFORM(IOS_FAMILY) && !PLATFORM(IOS_FAMILY_SIMULATOR)": true
-      default: false
+      default: true
     WebKit:
       default: true
     WebCore:
-      default: false
+      default: true
 
 # FIXME: WebKit has an alternate name for this called 'ShowDebugBorders'. We should standardize on one name.
 CompositingBordersVisible:
