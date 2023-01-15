@@ -150,6 +150,9 @@ pas_try_allocate_intrinsic_primitive_impl_medium_slow_case(
             allocator_result.did_succeed = false;
         }
 
+        // nosajmik
+        pas_log("Calling try_allocate_common_fast with aligned_size=%zu\n", aligned_size);
+
         if (PAS_LIKELY(allocator_result.did_succeed)) {
             return try_allocate_common_fast(
                 allocator, pas_trivial_size_thunk, (void*)aligned_size, alignment);
@@ -202,7 +205,7 @@ pas_try_allocate_intrinsic_primitive_impl_inline_only(
     index = pas_segregated_heap_index_for_primitive_count(aligned_size,
                                                           config);
 
-    if (verbose) {
+    if (verbose && aligned_size == 176) {
         pas_log("aligned_size = %zu, index = %zu, alignment = %zu.\n",
                 aligned_size, index, alignment);
     }
@@ -224,7 +227,7 @@ pas_try_allocate_intrinsic_primitive_impl_inline_only(
         
         allocator_index = intrinsic_support->index_to_allocator_index[index];
         
-        if (verbose)
+        if (verbose && aligned_size == 176)
             pas_log("allocator_index = %u.\n", allocator_index);
         
         allocator_result = pas_thread_local_cache_try_get_local_allocator(cache, allocator_index);
@@ -248,7 +251,12 @@ pas_try_allocate_intrinsic_primitive_impl_inline_only(
         return pas_allocation_result_create_failure();
     }
     
-    return try_allocate_common_fast_inline_only(allocator);
+    // if (aligned_size == 176) pas_log("nosajmik test\n");
+    // if (aligned_size == 176) pas_log("allocator object size: %zu, aligned size: %zu\n", allocator->object_size, aligned_size);
+
+    pas_allocation_result ret = try_allocate_common_fast_inline_only(allocator);
+    // if (aligned_size == 176) pas_log("allocation result begin: %p\n", ret.begin);
+    return ret;
 }
 
 #define PAS_CREATE_TRY_ALLOCATE_INTRINSIC_PRIMITIVE(name, heap_config, runtime_config, allocator_counts, result_filter, heap, heap_support, designation_mode) \

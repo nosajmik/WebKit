@@ -83,7 +83,9 @@ PAS_CREATE_TRY_ALLOCATE_INTRINSIC_PRIMITIVE(
 
 static PAS_ALWAYS_INLINE void* bmalloc_try_allocate_inline(size_t size)
 {
-    return (void*)bmalloc_try_allocate_impl(size, 1).begin;
+    void *ptr = (void*)bmalloc_try_allocate_impl(size, 1).begin;
+    pas_log("[*] nosajmik: bmalloc_try_allocate_inline called, got %p, size = %zu\n", ptr, size);
+    return ptr;
 }
 
 static PAS_ALWAYS_INLINE void*

@@ -128,8 +128,14 @@ PreciseAllocation* PreciseAllocation::createForLowerTier(Heap& heap, size_t size
     size_t adjustedAlignmentAllocationSize = headerSize() + size + halfAlignment;
     static_assert(halfAlignment == 8, "We assume that memory returned by malloc has alignment >= 8.");
 
+    // nosajmik: print size vars
+    fprintf(stderr, "createForLowerTier called with size = %zu, headerSize = %zu, adjustedSize = %zu\n", size, headerSize(), adjustedAlignmentAllocationSize);
+
     void* space = subspace->alignedMemoryAllocator()->tryAllocateMemory(adjustedAlignmentAllocationSize);
     RELEASE_ASSERT(space);
+
+    // nosajmik: print addr of space ptr
+    fprintf(stderr, "Malloc result for createForLowerTier at %p\n", space);
 
     bool adjustedAlignment = false;
     if (!isAlignedForPreciseAllocation(space)) {
@@ -137,6 +143,9 @@ PreciseAllocation* PreciseAllocation::createForLowerTier(Heap& heap, size_t size
         adjustedAlignment = true;
         ASSERT(isAlignedForPreciseAllocation(space));
     }
+
+    // nosajmik: print after adjusted alignment
+    // fprintf(stderr, "Ptr after alignment: %p\n", space);
 
     if (scribbleFreeCells())
         scribble(space, size);

@@ -63,7 +63,8 @@ pas_try_allocate_common_impl_fast(
     void* size_thunk_arg,
     size_t alignment)
 {
-    static const bool verbose = false;
+    // nosajmik
+    static const bool verbose = true;
     
     pas_allocation_result result;
     result = pas_local_allocator_try_allocate(allocator,

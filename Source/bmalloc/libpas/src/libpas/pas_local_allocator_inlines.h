@@ -1314,7 +1314,8 @@ pas_local_allocator_try_allocate_with_free_bits(
     pas_local_allocator* allocator,
     pas_segregated_page_config page_config)
 {
-    static const bool verbose = false;
+    // nosajmik
+    static const bool verbose = true;
 
     uintptr_t found_bit_index;
     uint64_t current_word;
@@ -1357,6 +1358,9 @@ pas_local_allocator_try_allocate_with_free_bits(
     }
 
     page_ish = allocator->page_ish;
+
+    // nosajmik
+    pas_log("page_ish: %p, min_align_shift: %zu\n", page_ish, page_config.base.min_align_shift);
     
     if (PAS_UNLIKELY(!current_word)) {
         unsigned end_offset;
@@ -1716,7 +1720,8 @@ pas_local_allocator_try_allocate(pas_local_allocator* allocator,
                                  pas_allocator_counts* counts,
                                  pas_allocation_result_filter result_filter)
 {
-    static const bool verbose = false;
+    // nosajmik
+    static const bool verbose = true;
     pas_allocation_result result;
 
     PAS_TESTING_ASSERT(!allocator->scavenger_data.is_in_use);
