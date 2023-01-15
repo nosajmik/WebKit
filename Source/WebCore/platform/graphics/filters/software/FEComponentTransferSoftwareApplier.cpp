@@ -32,6 +32,11 @@
 #include <wtf/MathExtras.h>
 #include <wtf/StdLibExtras.h>
 
+// For kpc_get_thread_counters: nosajmik
+#include <dlfcn.h>
+#include <inttypes.h>
+#include <stdint.h>
+
 namespace WebCore {
 
 void FEComponentTransferSoftwareApplier::computeIdentityTable(LookupTable&, const ComponentTransferFunction&)
@@ -114,6 +119,40 @@ FEComponentTransferSoftwareApplier::LookupTable FEComponentTransferSoftwareAppli
 
 void FEComponentTransferSoftwareApplier::applyPlatform(PixelBuffer& pixelBuffer) const
 {
+    // jsc or WebKit MUST BE RUN AS ROOT for this to work.
+    const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
+    void *kperf_lib = NULL;
+    int (*kpc_get_thread_counters)(int, unsigned, uint64_t *) = NULL;
+
+    // The array size is the size of the entire array divided by the size of the
+    // first element, i.e. this macro expands to the number of elements in the
+    // array.
+    #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+    // We cannot open the KPC API provided by the kernel ourselves directly.
+    // Instead we rely on the kperf framework which is entitled to access
+    // this API.
+    kperf_lib = dlopen(kperf_path, RTLD_LAZY);
+    
+    if (!kperf_lib) {
+        fprintf(stderr, "Couldn't open /System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf. Is WebKit running with root privileges?\n");
+    }
+
+    // Look up kpc_get_thread_counters.
+    // Need to do some casting here because compiler will complain about
+    // assigning void pointer to function pointer
+    *(void **)(&kpc_get_thread_counters) = dlsym(kperf_lib, "kpc_get_thread_counters");
+
+    // Storage space for performance counters on two timestamps.
+    // Read with serialization on both sides.
+    uint64_t counters_before[10];
+    uint64_t counters_after[10];
+    
+    // Timestamp 1
+    asm volatile ("isb sy");
+    kpc_get_thread_counters(0, ARRAY_SIZE(counters_before), counters_before);
+    asm volatile ("isb sy");
+
     auto* data = pixelBuffer.bytes();
     auto pixelByteLength = pixelBuffer.sizeInBytes();
 
@@ -128,6 +167,14 @@ void FEComponentTransferSoftwareApplier::applyPlatform(PixelBuffer& pixelBuffer)
         data[pixelOffset + 2] = blueTable[data[pixelOffset + 2]];
         data[pixelOffset + 3] = alphaTable[data[pixelOffset + 3]];
     }
+
+    // Timestamp 2
+    asm volatile ("isb sy");
+    kpc_get_thread_counters(0, ARRAY_SIZE(counters_after), counters_after);
+    asm volatile ("isb sy");
+    
+    uint64_t dt = counters_after[2] - counters_before[2];
+    fprintf(stderr, "FEComponentTransferSoftwareApplier::applyPlatform took %llu cycles\n", dt);
 }
 
 bool FEComponentTransferSoftwareApplier::apply(const Filter&, const FilterImageVector& inputs, FilterImage& result) const

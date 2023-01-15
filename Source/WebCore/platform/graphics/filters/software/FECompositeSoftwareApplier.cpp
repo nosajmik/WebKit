@@ -31,6 +31,11 @@
 #include "PixelBuffer.h"
 #include <wtf/MathExtras.h>
 
+// For kpc_get_thread_counters: nosajmik
+#include <dlfcn.h>
+#include <inttypes.h>
+#include <stdint.h>
+
 namespace WebCore {
 
 uint8_t FECompositeSoftwareApplier::clampByte(int c)
@@ -128,6 +133,40 @@ inline void FECompositeSoftwareApplier::applyPlatformArithmetic(unsigned char* s
 
 bool FECompositeSoftwareApplier::applyArithmetic(FilterImage& input, FilterImage& input2, FilterImage& result) const
 {
+    // jsc or WebKit MUST BE RUN AS ROOT for this to work.
+    const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
+    void *kperf_lib = NULL;
+    int (*kpc_get_thread_counters)(int, unsigned, uint64_t *) = NULL;
+
+    // The array size is the size of the entire array divided by the size of the
+    // first element, i.e. this macro expands to the number of elements in the
+    // array.
+    #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+    // We cannot open the KPC API provided by the kernel ourselves directly.
+    // Instead we rely on the kperf framework which is entitled to access
+    // this API.
+    kperf_lib = dlopen(kperf_path, RTLD_LAZY);
+    
+    if (!kperf_lib) {
+        fprintf(stderr, "Couldn't open /System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf. Is WebKit running with root privileges?\n");
+    }
+
+    // Look up kpc_get_thread_counters.
+    // Need to do some casting here because compiler will complain about
+    // assigning void pointer to function pointer
+    *(void **)(&kpc_get_thread_counters) = dlsym(kperf_lib, "kpc_get_thread_counters");
+
+    // Storage space for performance counters on two timestamps.
+    // Read with serialization on both sides.
+    uint64_t counters_before[10];
+    uint64_t counters_after[10];
+    
+    // Timestamp 1
+    asm volatile ("isb sy");
+    kpc_get_thread_counters(0, ARRAY_SIZE(counters_before), counters_before);
+    asm volatile ("isb sy");
+
     auto destinationPixelBuffer = result.pixelBuffer(AlphaPremultiplication::Premultiplied);
     if (!destinationPixelBuffer)
         return false;
@@ -148,11 +187,54 @@ bool FECompositeSoftwareApplier::applyArithmetic(FilterImage& input, FilterImage
 #if !HAVE(ARM_NEON_INTRINSICS)
     applyPlatformArithmetic(sourcePixelBytes, destinationPixelBytes, length, m_effect.k1(), m_effect.k2(), m_effect.k3(), m_effect.k4());
 #endif
+
+    // Timestamp 2
+    asm volatile ("isb sy");
+    kpc_get_thread_counters(0, ARRAY_SIZE(counters_after), counters_after);
+    asm volatile ("isb sy");
+    
+    uint64_t dt = counters_after[2] - counters_before[2];
+    fprintf(stderr, "FECompositeSoftwareApplier::applyArithmetic took %llu cycles\n", dt);
+
     return true;
 }
 
 bool FECompositeSoftwareApplier::applyNonArithmetic(FilterImage& input, FilterImage& input2, FilterImage& result) const
 {
+    // jsc or WebKit MUST BE RUN AS ROOT for this to work.
+    const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
+    void *kperf_lib = NULL;
+    int (*kpc_get_thread_counters)(int, unsigned, uint64_t *) = NULL;
+
+    // The array size is the size of the entire array divided by the size of the
+    // first element, i.e. this macro expands to the number of elements in the
+    // array.
+    #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+    // We cannot open the KPC API provided by the kernel ourselves directly.
+    // Instead we rely on the kperf framework which is entitled to access
+    // this API.
+    kperf_lib = dlopen(kperf_path, RTLD_LAZY);
+    
+    if (!kperf_lib) {
+        fprintf(stderr, "Couldn't open /System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf. Is WebKit running with root privileges?\n");
+    }
+
+    // Look up kpc_get_thread_counters.
+    // Need to do some casting here because compiler will complain about
+    // assigning void pointer to function pointer
+    *(void **)(&kpc_get_thread_counters) = dlsym(kperf_lib, "kpc_get_thread_counters");
+
+    // Storage space for performance counters on two timestamps.
+    // Read with serialization on both sides.
+    uint64_t counters_before[10];
+    uint64_t counters_after[10];
+    
+    // Timestamp 1
+    asm volatile ("isb sy");
+    kpc_get_thread_counters(0, ARRAY_SIZE(counters_before), counters_before);
+    asm volatile ("isb sy");
+
     auto resultImage = result.imageBuffer();
     if (!resultImage)
         return false;
@@ -214,6 +296,14 @@ bool FECompositeSoftwareApplier::applyNonArithmetic(FilterImage& input, FilterIm
         filterContext.drawImageBuffer(*inputImage, inputImageRect, { { }, inputImage->logicalSize() }, CompositeOperator::PlusLighter);
         break;
     }
+
+    // Timestamp 2
+    asm volatile ("isb sy");
+    kpc_get_thread_counters(0, ARRAY_SIZE(counters_after), counters_after);
+    asm volatile ("isb sy");
+    
+    uint64_t dt = counters_after[2] - counters_before[2];
+    fprintf(stderr, "FECompositeSoftwareApplier::applyNonArithmetic took %llu cycles\n", dt);
 
     return true;
 }
