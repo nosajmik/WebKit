@@ -2041,6 +2041,7 @@ static JSC_DECLARE_HOST_FUNCTION(functionCpuRdtsc);
 
 // Instrumenting function for Stephan
 static JSC_DECLARE_HOST_FUNCTION(functionTimeWasmMemAccessM1);
+static JSC_DECLARE_HOST_FUNCTION(functionTimeLoad);
 static JSC_DECLARE_HOST_FUNCTION(functionGetuid);
 static JSC_DECLARE_HOST_FUNCTION(functionGeteuid);
 
@@ -2302,6 +2303,75 @@ JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
     asm volatile ("isb sy");
 
     return JSValue::encode(jsNumber(counters[2]));
+}
+
+/*
+Analogue of $vm.timeWasmMemAccessM1, but takes the upper 32 bits
+and lower 32 bits of an arbitrary virtual address to time the load of.
+Note that supplying an unmapped/invalid virtual address will cause
+the renderer process to segfault.
+*/
+JSC_DEFINE_HOST_FUNCTION(functionTimeLoad, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    // jsc or WebKit MUST BE RUN AS ROOT for this to work.
+    if (getuid() != 0 || geteuid() != 0) {
+        return JSValue::encode(jsUndefined());
+    }
+
+    const char *kperf_path = "/System/Library/PrivateFrameworks/kperf.framework/Versions/A/kperf";
+    void *kperf_lib = NULL;
+    volatile int (*kpc_get_thread_counters)(int, unsigned, volatile uint64_t *) = NULL;
+
+    // The array size is the size of the entire array divided by the size of the
+    // first element, i.e. this macro expands to the number of elements in the
+    // array.
+    #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
+    // We cannot open the KPC API provided by the kernel ourselves directly.
+	// Instead we rely on the kperf framework which is entitled to access
+	// this API.
+	kperf_lib = dlopen(kperf_path, RTLD_LAZY);
+    
+    if (!kperf_lib) {
+        // return undefined to user since printing doesn't work very well here
+        return JSValue::encode(jsUndefined());
+    }
+
+    // Look up kpc_get_thread_counters.
+    // Need to do some casting here because compiler will complain about
+    // assigning void pointer to function pointer
+	*(void **)(&kpc_get_thread_counters) = dlsym(kperf_lib, "kpc_get_thread_counters");
+
+	// Storage space for performance counters on two timestamps.
+    // Read with serialization on both sides.
+	volatile uint64_t counters_before[10];
+    volatile uint64_t counters_after[10];
+
+    // Get upper 32 and lower 32 bits.
+    JSValue upper32_jsvalue = callFrame->argument(1);
+    volatile uint32_t upper32 = upper32_jsvalue.asUInt32();
+
+    JSValue lower32_jsvalue = callFrame->argument(1);
+    volatile uint32_t lower32 = lower32_jsvalue.asUInt32();
+
+    volatile uint64_t reconstructed_addr = (upper32 << 32) + lower32;
+    volatile uint8_t *target = (uint8_t *)reconstructed_addr;
+
+    // Timestamp 1
+    asm volatile ("isb sy");
+    kpc_get_thread_counters(0, ARRAY_SIZE(counters_before), counters_before);
+    asm volatile ("isb sy");
+
+    // Target access
+    *(volatile char *) target;
+    asm volatile("dsb ish"); // lfence
+
+     // Timestamp 2
+    asm volatile ("isb sy");
+    kpc_get_thread_counters(0, ARRAY_SIZE(counters_after), counters_after);
+    asm volatile ("isb sy");
+
+    return JSValue::encode(jsNumber(counters_after[2] - counters_before[2]));
 }
 
 /*
@@ -4189,6 +4259,7 @@ void JSDollarVM::finishCreation(VM& vm)
 
     // Instrumenting function for Stephan
     addFunction(vm, "timeWasmMemAccessM1", functionTimeWasmMemAccessM1, 2);
+    addFunction(vm, "timeLoad", functionTimeLoad, 2);
     addFunction(vm, "getuid", functionGetuid, 0);
     addFunction(vm, "geteuid", functionGeteuid, 0);
 
