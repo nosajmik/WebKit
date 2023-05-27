@@ -2348,7 +2348,7 @@ JSC_DEFINE_HOST_FUNCTION(functionTimeLoad, (JSGlobalObject* globalObject, CallFr
     volatile uint64_t counters_after[10];
 
     // Get upper 32 and lower 32 bits.
-    JSValue upper32_jsvalue = callFrame->argument(1);
+    JSValue upper32_jsvalue = callFrame->argument(0);
     volatile uint32_t upper32 = upper32_jsvalue.asUInt32();
 
     JSValue lower32_jsvalue = callFrame->argument(1);
