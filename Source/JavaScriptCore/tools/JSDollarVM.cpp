@@ -2139,6 +2139,7 @@ static JSC_DECLARE_HOST_FUNCTION(functionCpuRdtsc);
 // Cheating functions
 static JSC_DECLARE_HOST_FUNCTION(functionTimeLoad);
 static JSC_DECLARE_HOST_FUNCTION(functionSerializedFlush);
+static JSC_DECLARE_HOST_FUNCTION(functionTimeLoadAddr);
 static JSC_DECLARE_HOST_FUNCTION(functionPinCore);
 static JSC_DECLARE_HOST_FUNCTION(functionFlushChannel);
 
@@ -2434,6 +2435,38 @@ JSC_DEFINE_HOST_FUNCTION(functionSerializedFlush, (JSGlobalObject* globalObject,
     asm volatile("dsb ish");
 
     return JSValue::encode(jsUndefined());
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionTimeLoadAddr, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    // Get upper 32 and lower 32 bits.
+    JSValue upper32_jsvalue = callFrame->argument(0);
+    volatile uint32_t upper32 = upper32_jsvalue.asUInt32();
+
+    JSValue lower32_jsvalue = callFrame->argument(1);
+    volatile uint32_t lower32 = lower32_jsvalue.asUInt32();
+
+    volatile uint64_t reconstructed_addr = (upper32 << 32) + lower32;
+    void *ptr = (void *)reconstructed_addr;
+
+    // Timing code with patched kernel
+    uint64_t t0, t1;
+
+    // First timestamp
+    asm volatile("isb");
+    asm volatile("mrs %0, S3_2_c15_c0_0" : "=r"(t0) : :);
+    asm volatile("isb");
+
+    // Target access
+    *(volatile char *) ptr;
+    asm volatile("dsb ish");
+
+    // Second timestamp
+    asm volatile("isb");
+    asm volatile("mrs %0, S3_2_c15_c0_0" : "=r"(t1) : :);
+    asm volatile("isb");
+
+    return JSValue::encode(jsNumber(t1 - t0));
 }
 
 JSC_DEFINE_HOST_FUNCTION(functionPinCore, (JSGlobalObject* globalObject, CallFrame* callFrame))
@@ -4296,6 +4329,7 @@ void JSDollarVM::finishCreation(VM& vm)
     // Cheating functions
     addFunction(vm, "timeLoad"_s, functionTimeLoad, 2);
     addFunction(vm, "serializedFlush"_s, functionSerializedFlush, 2);
+    addFunction(vm, "timeLoadAddr"_s, functionTimeLoadAddr, 2);
     addFunction(vm, "pinCore"_s, functionPinCore, 1);
     addFunction(vm, "flushChannel"_s, functionFlushChannel, 2);
 
