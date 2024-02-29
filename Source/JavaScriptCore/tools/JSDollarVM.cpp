@@ -88,6 +88,12 @@
 #include "WasmStreamingParser.h"
 #endif
 
+// nosajmik: includes for cheating functions
+#include <inttypes.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <sys/sysctl.h>
+
 #if PLATFORM(COCOA)
 #include <wtf/cocoa/CrashReporter.h>
 #endif
@@ -2129,6 +2135,16 @@ static JSC_DECLARE_HOST_FUNCTION(functionDFGTrue);
 static JSC_DECLARE_HOST_FUNCTION(functionFTLTrue);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuMfence);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuRdtsc);
+
+// Cheating functions
+static JSC_DECLARE_HOST_FUNCTION(functionTimeLoad);
+static JSC_DECLARE_HOST_FUNCTION(functionSerializedFlush);
+static JSC_DECLARE_HOST_FUNCTION(functionPinCore);
+
+// Describe function port from JSC shell to dollar VM
+static JSC_DECLARE_HOST_FUNCTION(functionDescribe);
+static JSC_DECLARE_HOST_FUNCTION(functionDescribeArray);
+
 static JSC_DECLARE_HOST_FUNCTION(functionCpuCpuid);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuPause);
 static JSC_DECLARE_HOST_FUNCTION(functionCpuClflush);
@@ -2358,6 +2374,97 @@ JSC_DEFINE_HOST_FUNCTION(functionCpuRdtsc, (JSGlobalObject*, CallFrame*))
 #else
     return JSValue::encode(jsNumber(0));
 #endif
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionTimeLoad, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    // Prep work to access variables passed in from JS runtime
+    VM& vm = globalObject->vm();
+
+    // WebAssembly memory is an ArrayBuffer
+    if (JSArrayBufferView* view = jsDynamicCast<JSArrayBufferView*>(vm, callFrame->argument(0))) {
+        volatile void *vector = view->vectorWithoutPACValidation();
+
+        volatile uint8_t *wasmMemoryBasePtr = static_cast<volatile uint8_t*>(vector);
+
+        // Need to convert address from a NaN-boxed JSC value to int in C++
+        JSValue addrValue = callFrame->argument(1);
+        volatile uint32_t addr = addrValue.asUInt32();
+
+        volatile uint8_t *target = wasmMemoryBasePtr + addr;
+
+        // Timing code with patched kernel
+        uint64_t t0, t1;
+
+        // First timestamp
+        asm volatile("isb");
+        asm volatile("mrs %0, S3_2_c15_c0_0" : "=r"(t0) : :);
+        asm volatile("isb");
+
+        // Target access
+        *(volatile char *) target;
+        asm volatile("dsb ish");
+
+        // Second timestamp
+        asm volatile("isb");
+        asm volatile("mrs %0, S3_2_c15_c0_0" : "=r"(t1) : :);
+        asm volatile("isb");
+
+        return JSValue::encode(jsNumber(t1 - t0));
+    }
+
+    return JSValue::encode(jsUndefined());
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionSerializedFlush, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    // Get upper 32 and lower 32 bits.
+    JSValue upper32_jsvalue = callFrame->argument(0);
+    volatile uint32_t upper32 = upper32_jsvalue.asUInt32();
+
+    JSValue lower32_jsvalue = callFrame->argument(1);
+    volatile uint32_t lower32 = lower32_jsvalue.asUInt32();
+
+    volatile uint64_t reconstructed_addr = (upper32 << 32) + lower32;
+    void *ptr = (void *)reconstructed_addr;
+
+    asm volatile("dc civac, %0" : : "r"(ptr) : "memory");
+    asm volatile("isb");
+    asm volatile("dsb ish");
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionPinCore, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    // Get Core ID.
+    JSValue coreid_jsvalue = callFrame->argument(0);
+    uint32_t coreid = coreid_jsvalue.asUInt32();
+    uint32_t ret = sysctlbyname("kern.sched_thread_bind_cpu", NULL, NULL, &coreid, sizeof(uint32_t));
+
+    if (ret == -1)
+    {
+        return JSValue::encode(jsBoolean(false));
+    }
+
+    return JSValue::encode(jsBoolean(true));
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionDescribe, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    VM& vm = globalObject->vm();
+    if (callFrame->argumentCount() < 1)
+        return JSValue::encode(jsUndefined());
+    return JSValue::encode(jsString(vm, toString(callFrame->argument(0))));
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionDescribeArray, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    if (callFrame->argumentCount() < 1)
+        return JSValue::encode(jsUndefined());
+    VM& vm = globalObject->vm();
+    JSObject* object = jsDynamicCast<JSObject*>(vm, callFrame->argument(0));
+    if (!object)
+        return JSValue::encode(jsNontrivialString(vm, "<not object>"_s));
+    return JSValue::encode(jsNontrivialString(vm, toString("<Butterfly: ", RawPointer(object->butterfly()), "; public length: ", object->getArrayLength(), "; vector length: ", object->getVectorLength(), ">")));
 }
 
 JSC_DEFINE_HOST_FUNCTION(functionCpuCpuid, (JSGlobalObject*, CallFrame*))
@@ -4154,6 +4261,15 @@ void JSDollarVM::finishCreation(VM& vm)
     putDirectNativeFunction(vm, globalObject, Identifier::fromString(vm, "cpuCpuid"_s), 0, functionCpuCpuid, ImplementationVisibility::Public, CPUCpuidIntrinsic, jsDollarVMPropertyAttributes);
     putDirectNativeFunction(vm, globalObject, Identifier::fromString(vm, "cpuPause"_s), 0, functionCpuPause, ImplementationVisibility::Public, CPUPauseIntrinsic, jsDollarVMPropertyAttributes);
     addFunction(vm, "cpuClflush"_s, functionCpuClflush, 2);
+
+    // Cheating functions
+    addFunction(vm, "timeLoad"_s, functionTimeLoad, 2);
+    addFunction(vm, "serializedFlush"_s, functionSerializedFlush, 2);
+    addFunction(vm, "pinCore"_s, functionPinCore, 1);
+
+    // Describe function port from JSC shell to dollar VM
+    addFunction(vm, "describe"_s, functionDescribe, 1);
+    addFunction(vm, "describeArray"_s, functionDescribeArray, 1);
 
     addFunction(vm, "llintTrue"_s, functionLLintTrue, 0);
     addFunction(vm, "baselineJITTrue"_s, functionBaselineJITTrue, 0);

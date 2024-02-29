@@ -931,6 +931,9 @@ RetainPtr<CFDataRef> WebProcess::sourceApplicationAuditData() const
 
 void WebProcess::initializeSandbox(const AuxiliaryProcessInitializationParameters& parameters, SandboxInitializationParameters& sandboxParameters)
 {
+    // nosajmik: this needs to be disabled for JSC in WebProcess to have sudo and syscall access.
+    return;
+    
 #if PLATFORM(MAC) || PLATFORM(MACCATALYST)
     auto webKitBundle = [NSBundle bundleForClass:NSClassFromString(@"WKWebView")];
 
