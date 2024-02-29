@@ -2461,7 +2461,7 @@ JSC_DEFINE_HOST_FUNCTION(functionDescribeArray, (JSGlobalObject* globalObject, C
     if (callFrame->argumentCount() < 1)
         return JSValue::encode(jsUndefined());
     VM& vm = globalObject->vm();
-    JSObject* object = jsDynamicCast<JSObject*>(vm, callFrame->argument(0));
+    JSObject* object = jsDynamicCast<JSObject*>(callFrame->argument(0));
     if (!object)
         return JSValue::encode(jsNontrivialString(vm, "<not object>"_s));
     return JSValue::encode(jsNontrivialString(vm, toString("<Butterfly: ", RawPointer(object->butterfly()), "; public length: ", object->getArrayLength(), "; vector length: ", object->getVectorLength(), ">")));
