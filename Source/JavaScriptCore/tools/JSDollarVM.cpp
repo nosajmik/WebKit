@@ -2431,6 +2431,8 @@ JSC_DEFINE_HOST_FUNCTION(functionSerializedFlush, (JSGlobalObject* globalObject,
     asm volatile("dc civac, %0" : : "r"(ptr) : "memory");
     asm volatile("isb");
     asm volatile("dsb ish");
+
+    return JSValue::encode(jsUndefined());
 }
 
 JSC_DEFINE_HOST_FUNCTION(functionPinCore, (JSGlobalObject* globalObject, CallFrame* callFrame))
