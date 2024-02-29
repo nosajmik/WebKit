@@ -2423,11 +2423,13 @@ JSC_DEFINE_HOST_FUNCTION(functionSerializedFlush, (JSGlobalObject* globalObject,
     // Get upper 32 and lower 32 bits.
     JSValue upper32_jsvalue = callFrame->argument(0);
     volatile uint32_t upper32 = upper32_jsvalue.asUInt32();
+    volatile uint64_t upper32_ext = (uint64_t)upper32;
 
     JSValue lower32_jsvalue = callFrame->argument(1);
     volatile uint32_t lower32 = lower32_jsvalue.asUInt32();
+    volatile uint64_t lower32_ext = (uint64_t)lower32;
 
-    volatile uint64_t reconstructed_addr = (upper32 << 32) + lower32;
+    volatile uint64_t reconstructed_addr = (upper32_ext << 32) + lower32_ext;
     void *ptr = (void *)reconstructed_addr;
 
     asm volatile("dc civac, %0" : : "r"(ptr) : "memory");
@@ -2442,11 +2444,13 @@ JSC_DEFINE_HOST_FUNCTION(functionTimeLoadAddr, (JSGlobalObject* globalObject, Ca
     // Get upper 32 and lower 32 bits.
     JSValue upper32_jsvalue = callFrame->argument(0);
     volatile uint32_t upper32 = upper32_jsvalue.asUInt32();
+    volatile uint64_t upper32_ext = (uint64_t)upper32;
 
     JSValue lower32_jsvalue = callFrame->argument(1);
     volatile uint32_t lower32 = lower32_jsvalue.asUInt32();
+    volatile uint64_t lower32_ext = (uint64_t)lower32;
 
-    volatile uint64_t reconstructed_addr = (upper32 << 32) + lower32;
+    volatile uint64_t reconstructed_addr = (upper32_ext << 32) + lower32_ext;
     void *ptr = (void *)reconstructed_addr;
 
     // Timing code with patched kernel
