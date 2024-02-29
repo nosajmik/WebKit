@@ -2140,6 +2140,7 @@ static JSC_DECLARE_HOST_FUNCTION(functionCpuRdtsc);
 static JSC_DECLARE_HOST_FUNCTION(functionTimeLoad);
 static JSC_DECLARE_HOST_FUNCTION(functionSerializedFlush);
 static JSC_DECLARE_HOST_FUNCTION(functionPinCore);
+static JSC_DECLARE_HOST_FUNCTION(functionFlushChannel);
 
 // Describe function port from JSC shell to dollar VM
 static JSC_DECLARE_HOST_FUNCTION(functionDescribe);
@@ -2448,6 +2449,34 @@ JSC_DEFINE_HOST_FUNCTION(functionPinCore, (JSGlobalObject* globalObject, CallFra
     }
 
     return JSValue::encode(jsBoolean(true));
+}
+
+JSC_DEFINE_HOST_FUNCTION(functionFlushChannel, (JSGlobalObject* globalObject, CallFrame* callFrame))
+{
+    // Prep work to access variables passed in from JS runtime
+    VM& vm = globalObject->vm();
+
+    // WebAssembly memory is an ArrayBuffer
+    if (JSArrayBufferView* view = jsDynamicCast<JSArrayBufferView*>(callFrame->argument(0))) {
+        volatile void *vector = view->vectorWithoutPACValidation();
+
+        volatile uint8_t *wasmMemoryBasePtr = static_cast<volatile uint8_t*>(vector);
+
+        // Need to convert address from a NaN-boxed JSC value to int in C++
+        JSValue addrValue = callFrame->argument(1);
+        volatile uint32_t addr = addrValue.asUInt32();
+
+        volatile uint8_t *target = wasmMemoryBasePtr + addr;
+        void *ptr = (void *)target;
+
+        asm volatile("dc civac, %0" : : "r"(ptr) : "memory");
+        asm volatile("isb");
+        asm volatile("dsb ish");
+
+        return JSValue::encode(jsBoolean(true));
+    }
+
+    return JSValue::encode(jsBoolean(false));
 }
 
 JSC_DEFINE_HOST_FUNCTION(functionDescribe, (JSGlobalObject* globalObject, CallFrame* callFrame))
@@ -4268,6 +4297,7 @@ void JSDollarVM::finishCreation(VM& vm)
     addFunction(vm, "timeLoad"_s, functionTimeLoad, 2);
     addFunction(vm, "serializedFlush"_s, functionSerializedFlush, 2);
     addFunction(vm, "pinCore"_s, functionPinCore, 1);
+    addFunction(vm, "flushChannel"_s, functionFlushChannel, 2);
 
     // Describe function port from JSC shell to dollar VM
     addFunction(vm, "describe"_s, functionDescribe, 1);
