@@ -2382,7 +2382,7 @@ JSC_DEFINE_HOST_FUNCTION(functionTimeLoad, (JSGlobalObject* globalObject, CallFr
     VM& vm = globalObject->vm();
 
     // WebAssembly memory is an ArrayBuffer
-    if (JSArrayBufferView* view = jsDynamicCast<JSArrayBufferView*>(vm, callFrame->argument(0))) {
+    if (JSArrayBufferView* view = jsDynamicCast<JSArrayBufferView*>(callFrame->argument(0))) {
         volatile void *vector = view->vectorWithoutPACValidation();
 
         volatile uint8_t *wasmMemoryBasePtr = static_cast<volatile uint8_t*>(vector);
